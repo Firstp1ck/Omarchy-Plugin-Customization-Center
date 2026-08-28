@@ -20,7 +20,7 @@ _BASE_ENV = {"PATH", "HOME", "OMARCHY_PATH", "WAYLAND_DISPLAY", "HYPRLAND_INSTAN
 @dataclass(frozen=True)
 class CommandResult:
     argv: tuple[str, ...]
-    exit_code: int
+    exit_code: int | None
     stdout: str
     stderr: str
     timed_out: bool
@@ -67,16 +67,39 @@ class CommandRunner:
 
     def run(self, argv: Sequence[str], timeout_s: float, env_extra: Mapping[str, str | None] | None = None,
             stdin: str | bytes | None = None, capture_limit: int = 65536,
-            cwd: str | Path | None = None) -> CommandResult:
+            cwd: str | Path | None = None, wait_policy: str = "exit") -> CommandResult:
         args = self._validate_argv(argv)
+        if wait_policy not in {"exit", "detach"}:
+            raise ValueError("wait_policy must be exit or detach")
         self._check_mode(args)
         if timeout_s <= 0 or capture_limit < 0:
             raise ValueError("timeout and capture limit must be positive")
+        if wait_policy == "detach":
+            started = time.monotonic()
+            try:
+                process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                           stderr=subprocess.DEVNULL, env=self._env(env_extra), cwd=cwd,
+                                           start_new_session=True)
+            except FileNotFoundError:
+                return CommandResult(args, 127, "", f"command not found: {args[0]}", False,
+                                     int((time.monotonic() - started) * 1000), False)
+            try:
+                code: int | None = process.wait(timeout=timeout_s)
+                timed_out = False
+            except subprocess.TimeoutExpired:
+                code = None
+                timed_out = False
+            return CommandResult(args, code, "", "", timed_out,
+                                 int((time.monotonic() - started) * 1000), False)
         input_bytes = stdin.encode() if isinstance(stdin, str) else stdin
         started = time.monotonic()
-        process = subprocess.Popen(args, stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self._env(env_extra),
-                                   cwd=cwd, start_new_session=True)
+        try:
+            process = subprocess.Popen(args, stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=self._env(env_extra),
+                                       cwd=cwd, start_new_session=True)
+        except FileNotFoundError:
+            return CommandResult(args, 127, "", f"command not found: {args[0]}", False,
+                                 int((time.monotonic() - started) * 1000), False)
         captured = {"stdout": bytearray(), "stderr": bytearray()}
         truncated = {"stdout": False, "stderr": False}
 

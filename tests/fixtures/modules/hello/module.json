@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "hello",
+  "title": "Hello",
+  "description": "Contract fixture module",
+  "icon": "H",
+  "navOrder": 999,
+  "page": "Page.qml",
+  "backend": "backend",
+  "draftSchema": "schemas/draft-v1.json",
+  "statusSchema": "schemas/status-v1.json",
+  "coreServices": ["drafts"]
+}

@@ -16,8 +16,10 @@ from .jsonc import Diagnostic, Diagnostics, dumps_canonical, parse as parse_json
 from .lua import lua_string, luac_check
 from .capabilities import CapabilityCache, STANDARD_CAPABILITIES, probe_command, probe_shell, standard_capabilities
 from .catalog import CatalogRead
-
-# Part 2 adds `from . import operations as ops` here; no placeholder is provided because modules must never plan against fake operations.
+from . import operations as ops
+from .registry import Registry, RegistryEntry, RegistryView, load_registry
+from .context import Clock, Logger, build_context
+from .executor import Executor, FaultPlan
 
 __all__ = [
     "Capability", "Capabilities", "Context", "Module", "Operation", "OperationResult", "Plan", "PlanSegment",
@@ -29,4 +31,6 @@ __all__ = [
     "settings_schema", "toml_writer", "comment_prefix_for", "extract_managed_block", "inspect_managed_block", "markers",
     "replace_managed_block", "Diagnostic", "Diagnostics", "dumps_canonical", "parse_jsonc", "lua_string", "luac_check",
     "CapabilityCache", "STANDARD_CAPABILITIES", "probe_command", "probe_shell", "standard_capabilities", "CatalogRead",
+    "ops", "Registry", "RegistryEntry", "RegistryView", "load_registry", "Clock", "Logger", "build_context",
+    "Executor", "FaultPlan",
 ]

@@ -8,7 +8,7 @@ SHARED_CODES = frozenset({
     "resource_conflict", "nonreversible_requires_confirmation", "locked", "timeout",
     "malformed_output", "ipc_rejected", "handoff_failed", "verification_failed",
     "rollback_failed", "recovery_required", "transaction_not_found", "transaction_state_invalid",
-    "confirmation_invalid", "confirmation_expired", "unknown_module", "unknown_query", "internal_error",
+    "confirmation_invalid", "confirmation_expired", "unknown_module", "unknown_query", "internal_error", "registry",
 })
 
 

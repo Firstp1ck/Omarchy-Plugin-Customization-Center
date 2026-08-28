@@ -1,0 +1,247 @@
+#!/usr/bin/python3
+import sys
+sys.dont_write_bytecode = True
+
+import argparse
+import json
+import os
+import time
+import traceback
+from pathlib import Path
+
+CCCTL_PATH = Path(__file__).resolve()
+PLUGIN_DIR = CCCTL_PATH.parent.parent
+if str(CCCTL_PATH.parent) not in sys.path:
+    sys.path.insert(0, str(CCCTL_PATH.parent))
+
+from customization_center.core import CcError, Result, Warning, emit
+from customization_center.core.context import build_context
+from customization_center.core.drafts import asset_add, discard, load, save
+from customization_center.core.executor import Executor
+from customization_center.core.journal import Journal
+from customization_center.core.migrate import upgrade
+from customization_center.core.paths import Paths
+from customization_center.core.registry import load_registry
+
+
+class UsageError(Exception):
+    pass
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise UsageError(message)
+
+
+def parser():
+    root = Parser(prog="ccctl")
+    commands = root.add_subparsers(dest="command", required=True)
+    commands.add_parser("modules")
+    cap = commands.add_parser("capabilities"); cap.add_argument("module", nargs="?")
+    for name in ("status",):
+        item = commands.add_parser(name); item.add_argument("module")
+    for name in ("validate", "plan"):
+        item = commands.add_parser(name); item.add_argument("module"); item.add_argument("--draft", required=True)
+    query = commands.add_parser("query"); query.add_argument("module"); query.add_argument("name"); query.add_argument("--args")
+    apply = commands.add_parser("apply"); apply.add_argument("module"); apply.add_argument("--draft", required=True)
+    apply.add_argument("--expected-revision", required=True); apply.add_argument("--plan-digest")
+    apply.add_argument("--confirm", action="append", default=[])
+    confirm = commands.add_parser("confirm"); confirm.add_argument("transaction_id"); confirm.add_argument("--token", required=True)
+    rollback = commands.add_parser("rollback"); rollback.add_argument("transaction_id")
+    rollback.add_argument("--reason", choices=("user", "timeout", "recovery"), default="user")
+    rollback.add_argument("--force-stale", action="store_true")
+    transaction = commands.add_parser("transaction"); transaction.add_argument("transaction_id")
+    for name in ("reconcile", "abandon"):
+        item = commands.add_parser(name); item.add_argument("transaction_id")
+    commands.add_parser("recover")
+    restore = commands.add_parser("restore"); restore.add_argument("transaction_id"); restore.add_argument("--path", required=True)
+    resolve = commands.add_parser("resolve"); resolve.add_argument("transaction_id"); resolve.add_argument("--operation", required=True)
+    history = commands.add_parser("history"); history.add_argument("--module"); history.add_argument("--limit", type=int, default=50); history.add_argument("--state")
+    draft = commands.add_parser("draft").add_subparsers(dest="draft_command", required=True)
+    for name in ("load", "discard"):
+        item = draft.add_parser(name); item.add_argument("module")
+    item = draft.add_parser("save"); item.add_argument("module"); item.add_argument("--draft", required=True)
+    item = draft.add_parser("asset-add"); item.add_argument("module"); item.add_argument("--path", required=True)
+    migrate = commands.add_parser("migrate"); migrate.add_argument("module"); migrate.add_argument("--kind", required=True); migrate.add_argument("--document", required=True)
+    commands.add_parser("doctor")
+    return root
+
+
+def read_json_arg(value):
+    try:
+        if value == "-":
+            document = json.load(sys.stdin)
+        else:
+            document = json.loads(Path(value).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CcError("invalid_draft", f"Could not read JSON: {error}") from error
+    if not isinstance(document, dict):
+        raise CcError("invalid_draft", "JSON document must be an object")
+    return document
+
+
+def setup():
+    paths = Paths.from_env()
+    registry = load_registry(PLUGIN_DIR, paths=paths)
+    executor = Executor(PLUGIN_DIR, registry, paths, CCCTL_PATH)
+    return paths, registry, executor
+
+
+def result_data(command, args, paths, registry, executor):
+    view = registry.view
+    if command == "modules":
+        recovery = executor.recover()
+        modules = []
+        for entry in view:
+            ctx = build_context(entry.id, "read", paths=paths, registry=view, plugin_dir=PLUGIN_DIR)
+            metadata = dict(entry.metadata)
+            metadata.update({"pageUrl": (entry.directory / entry.metadata["page"]).resolve().as_uri(),
+                             "capabilities": ctx.capabilities.to_json(),
+                             "draftSchemaVersion": getattr(entry.module, "schema_version", 1)})
+            modules.append(metadata)
+        return {"modules": modules, "recovery": recovery}, None, registry.warnings, None
+    if command == "capabilities":
+        ids = [args.module] if args.module else list(view.entries)
+        data = {module_id: build_context(module_id, "read", paths=paths, registry=view, plugin_dir=PLUGIN_DIR).capabilities.to_json() for module_id in ids}
+        return data, None, (), None
+    if command == "status":
+        module = view.module(args.module)
+        status = module.status(build_context(args.module, "read", paths=paths, registry=view, plugin_dir=PLUGIN_DIR))
+        pending = [tx.to_json() for tx in Journal(paths).history(args.module, 50, "pending_handoff")]
+        return {**status.to_json(), "pendingHandoffs": pending}, status.revision, status.warnings, None
+    if command in {"validate", "plan"}:
+        module = view.module(args.module)
+        document = read_json_arg(args.draft)
+        document = document.get("draft", document)
+        status = module.status(build_context(args.module, "read", paths=paths, registry=view, plugin_dir=PLUGIN_DIR))
+        document = upgrade(module, "draft", document, build_context(args.module, "validate", paths=paths, registry=view, plugin_dir=PLUGIN_DIR))
+        validation = module.validate(build_context(args.module, "validate", paths=paths, registry=view, plugin_dir=PLUGIN_DIR), document, status)
+        if command == "validate":
+            return validation.to_json(), status.revision, (), None
+        if not validation.ok or validation.normalized_draft is None:
+            raise CcError("validation_failed", "Draft validation failed", {"issues": [x.to_json() for x in validation.issues]})
+        plan = module.plan(build_context(args.module, "plan", paths=paths, registry=view, plugin_dir=PLUGIN_DIR), validation.normalized_draft, status)
+        from dataclasses import replace
+        plan = replace(plan, plan_digest=executor.digest(plan))
+        return plan.to_json(), status.revision, plan.warnings, None
+    if command == "query":
+        entry = view.entry(args.module)
+        if args.name not in entry.metadata.get("queries", []):
+            raise CcError("unknown_query", f"Unknown query: {args.name}")
+        if not hasattr(entry.module, "query"):
+            raise CcError("unknown_query", f"Module does not implement query: {args.name}")
+        try:
+            values = {} if args.args is None else (json.load(sys.stdin) if args.args == "-" else json.loads(args.args))
+        except json.JSONDecodeError as error:
+            raise CcError("malformed_output", f"Query arguments are not valid JSON: {error}") from error
+        if not isinstance(values, dict):
+            raise CcError("malformed_output", "Query arguments must be a JSON object")
+        return entry.module.query(build_context(args.module, "query", paths=paths, registry=view, plugin_dir=PLUGIN_DIR), args.name, values), None, (), None
+    if command == "apply":
+        tx = executor.apply(args.module, read_json_arg(args.draft), args.expected_revision, args.plan_digest, args.confirm)
+        confirmation = None
+        if tx.confirmation:
+            confirmation = {key: value for key, value in tx.confirmation.items() if key != "tokenSha256"}
+        return {"state": tx.state, "pending": tx.state == "pending_handoff", "confirmation": confirmation}, tx.after_revision, (), tx.id
+    if command == "confirm":
+        tx = executor.confirm(args.transaction_id, args.token)
+        return {"state": tx.state}, None, (), tx.id
+    if command == "rollback":
+        try:
+            tx = executor.rollback(args.transaction_id, args.reason, args.force_stale)
+        except CcError as error:
+            if args.reason != "timeout" or error.code != "locked":
+                raise
+            tx = Journal(paths).load(args.transaction_id)
+        if tx.state == "rollback_failed":
+            raise CcError("rollback_failed", "One or more operations could not be reversed",
+                          executor._recovery_data(tx))
+        return {"state": tx.state}, tx.after_revision, (), tx.id
+    if command == "transaction":
+        txid = Journal(paths).current_transaction_id() if args.transaction_id == "current" else args.transaction_id
+        if not txid:
+            return {"transaction": None}, None, (), None
+        tx = Journal(paths).load(txid)
+        data = {"transaction": tx.to_json()}
+        pending = paths.runtime / "pending-confirm" / txid
+        if tx.state == "awaiting_confirmation" and pending.is_file():
+            data["confirmationToken"] = pending.read_text(encoding="utf-8").strip()
+        return data, tx.after_revision, (), tx.id
+    if command == "reconcile":
+        tx = executor.reconcile(args.transaction_id); return {"state": tx.state}, tx.after_revision, (), tx.id
+    if command == "abandon":
+        tx = executor.abandon(args.transaction_id); return {"state": tx.state}, None, (), tx.id
+    if command == "recover":
+        return executor.recover(), None, (), None
+    if command == "restore":
+        tx = executor.restore(args.transaction_id, args.path); return {"state": tx.state, "path": str(Path(args.path).absolute())}, None, (), tx.id
+    if command == "resolve":
+        tx = executor.resolve(args.transaction_id, args.operation); return {"state": tx.state, "operationId": args.operation}, None, (), tx.id
+    if command == "history":
+        if args.limit < 0:
+            raise CcError("unsupported_config", "History limit cannot be negative")
+        records = Journal(paths).history(args.module, args.limit, args.state)
+        data = [{"id": tx.id, "module": tx.module_id, "state": tx.state, "createdAt": tx.created_at,
+                 "updatedAt": tx.updated_at, "summary": tx.plan.summary, "reason": tx.reason} for tx in records]
+        return {"transactions": data}, None, (), None
+    if command == "draft":
+        view.module(args.module)
+        if args.draft_command == "load":
+            return {"draft": load(paths, args.module, PLUGIN_DIR)}, None, (), None
+        if args.draft_command == "save":
+            return {"draft": save(paths, args.module, read_json_arg(args.draft), PLUGIN_DIR)}, None, (), None
+        if args.draft_command == "discard":
+            return {"discarded": discard(paths, args.module)}, None, (), None
+        return {"asset": asset_add(paths, args.module, args.path)}, None, (), None
+    if command == "migrate":
+        module = view.module(args.module)
+        document = upgrade(module, args.kind, read_json_arg(args.document), build_context(args.module, "validate", paths=paths, registry=view, plugin_dir=PLUGIN_DIR))
+        return {"document": document}, None, (), None
+    if command == "doctor":
+        recovery = {"pending": [tx.id for tx in Journal(paths).pending_recovery()],
+                    "blocked": [tx.id for tx in Journal(paths).history(limit=1000000, state="rollback_failed")
+                                if any(not item.get("resolved") for item in tx.rollback_errors)]}
+        plugin_writable = os.access(PLUGIN_DIR, os.W_OK)
+        checks = {"python": sys.version.split()[0], "pythonSupported": sys.version_info >= (3, 11),
+                  "paths": {"plugin": str(PLUGIN_DIR), "state": str(paths.state), "runtime": str(paths.runtime), "omarchy": str(paths.omarchy_path)},
+                  "bytecodeDisabled": sys.dont_write_bytecode, "pluginDirectoryWritable": plugin_writable,
+                  "recovery": recovery}
+        return checks, None, registry.warnings, None
+    raise UsageError(f"unknown command {command}")
+
+
+def main():
+    started = time.monotonic()
+    command = sys.argv[1] if len(sys.argv) > 1 else ""
+    module = None
+    try:
+        args = parser().parse_args()
+        command = args.command
+        module = getattr(args, "module", None)
+        paths, registry, executor = setup()
+        data, revision, warnings, txid = result_data(command, args, paths, registry, executor)
+        output = Result(True, command, module, revision, data, tuple(warnings), (), txid,
+                        int((time.monotonic() - started) * 1000))
+        code = 0
+    except UsageError as error:
+        output = Result(False, command or "usage", module, data=None,
+                        errors=(CcError("unsupported_config", str(error)),),
+                        duration_ms=int((time.monotonic() - started) * 1000))
+        code = 2
+    except CcError as error:
+        txid = error.data.get("transactionId") if isinstance(error.data, dict) else None
+        output = Result(False, command or "unknown", module, data=error.data or None, errors=(error,),
+                        transaction_id=txid, duration_ms=int((time.monotonic() - started) * 1000))
+        code = 1
+    except Exception as error:
+        traceback.print_exc(file=sys.stderr)
+        output = Result(False, command or "unknown", module, data=None,
+                        errors=(CcError("internal_error", str(error)),),
+                        duration_ms=int((time.monotonic() - started) * 1000))
+        code = 1
+    sys.stdout.write(emit(output))
+    return code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

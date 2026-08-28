@@ -45,10 +45,13 @@ class ShellIpc:
         if result.exit_code != 0:
             if "function not found." in lowered or "target not found." in lowered:
                 raise CcError("unsupported_config", combined or "Shell IPC target is unsupported")
-            if any(value in lowered for value in ("not running", "not responding", "not ready")):
+            if any(value in lowered for value in ("not running", "not responding", "not ready", "command not found")):
                 raise CcError("runtime_unavailable", combined or "Omarchy shell is unavailable")
             raise CcError("ipc_rejected", combined or f"omarchy-shell exited {result.exit_code}")
         body = result.stdout.rstrip("\r\n")
+        body_lower = body.lower()
+        if "function not found." in body_lower or "target not found." in body_lower:
+            raise CcError("unsupported_config", body or "Shell IPC target is unsupported")
         parsed = None
         wants_json = expect_json or _METHOD_EXPECT[method] is None
         if wants_json:

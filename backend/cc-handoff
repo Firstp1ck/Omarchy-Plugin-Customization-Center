@@ -1,0 +1,19 @@
+#!/usr/bin/bash
+set +e
+
+txid=$1
+shift
+if [[ ! $txid =~ ^[0-9a-fA-F-]{36}$ ]]; then
+  printf 'invalid transaction id\n' >&2
+  exit 2
+fi
+"$@"
+exit_code=$?
+state_home=${XDG_STATE_HOME:-"$HOME/.local/state"}
+directory="$state_home/omarchy/customization-center/handoffs"
+mkdir -p -- "$directory"
+temporary=$(mktemp --tmpdir="$directory" ".${txid}.XXXXXX") || exit "$exit_code"
+printf '{"exitCode":%d,"finishedAt":"%s"}\n' "$exit_code" "$(date --utc +%Y-%m-%dT%H:%M:%SZ)" > "$temporary"
+chmod 600 "$temporary"
+mv -f -- "$temporary" "$directory/$txid.json"
+exit "$exit_code"

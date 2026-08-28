@@ -32,6 +32,14 @@ def test_transport_classification(fake_shell, stub_command):
     assert caught.value.code == "unsupported_config"
 
 
+@pytest.mark.parametrize("body", ["Function not found.\n", "Target not found.\n"])
+def test_exit_zero_missing_target_is_unsupported(stub_command, body):
+    stub_command("omarchy-shell", {"exit_code": 0, "stdout": body})
+    with pytest.raises(CcError) as caught:
+        ShellIpc(CommandRunner()).ping()
+    assert caught.value.code == "unsupported_config"
+
+
 def test_object_args_are_compact_json(fake_shell, stub_command):
     shell = ShellIpc(CommandRunner())
     shell.call("enablePlugin", "omarchy.menu", {"section": "left", "index": 0})
