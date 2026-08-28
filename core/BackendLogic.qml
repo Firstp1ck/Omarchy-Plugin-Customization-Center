@@ -6,6 +6,7 @@ QtObject {
     property var activeReads: ({})
     property var queuedReads: ({})
     property var mutationQueue: []
+    readonly property int maximumMutationTimeoutMs: 15 * 60 * 1000
 
     function malformedResult(message, output) {
         return {
@@ -47,9 +48,27 @@ QtObject {
         return parsed
     }
 
+    function supersededResult(command, moduleId) {
+        return {
+            schemaVersion: 1,
+            ok: false,
+            command: command || "read",
+            module: moduleId || null,
+            revision: null,
+            data: null,
+            warnings: [],
+            errors: [{ code: "superseded", message: "A newer read request replaced this queued request" }],
+            transactionId: null,
+            durationMs: 0
+        }
+    }
+
     function queueRead(moduleId, request) {
         var key = moduleId || "__global"
         if (activeReads[key]) {
+            var displaced = queuedReads[key]
+            if (displaced && typeof displaced.callback === "function")
+                displaced.callback(supersededResult(displaced.command, displaced.moduleId))
             var queued = Object.assign({}, queuedReads)
             queued[key] = request
             queuedReads = queued
@@ -59,6 +78,64 @@ QtObject {
         active[key] = request
         activeReads = active
         return true
+    }
+
+    function firstErrorCode(result) {
+        return result && result.errors && result.errors.length ? String(result.errors[0].code || "") : ""
+    }
+
+    function resolveRollbackPlan(transactionId, lookupBackend, callback, attempt) {
+        var retryCount = attempt || 0
+        lookupBackend.transaction(transactionId, function(result) {
+            if ((!result || !result.ok) && firstErrorCode(result) === "superseded" && retryCount < 1) {
+                Qt.callLater(function() {
+                    logic.resolveRollbackPlan(transactionId, lookupBackend, callback, retryCount + 1)
+                })
+                return
+            }
+            if (!result || !result.ok) {
+                callback({
+                    plan: ({}),
+                    forceMaximumTimeout: true,
+                    logLine: "Rollback plan could not be read for transaction " + transactionId + "; using the maximum timeout"
+                })
+                return
+            }
+            var record = result.data && result.data.transaction ? result.data.transaction : result.data
+            callback({
+                plan: record && record.plan ? record.plan : ({}),
+                forceMaximumTimeout: false,
+                logLine: ""
+            })
+        })
+    }
+
+    function timeoutFor(command, plan, forceMaximum) {
+        if (forceMaximum && (command === "apply" || command === "rollback"))
+            return maximumMutationTimeoutMs
+        if (["modules", "capabilities", "status", "history", "transaction", "confirm"].indexOf(command) >= 0)
+            return 10000
+        if (["validate", "plan", "query"].indexOf(command) >= 0)
+            return 30000
+        if (command === "apply" || command === "rollback") {
+            var total = 15000
+            var operations = plan && plan.operations ? plan.operations : []
+            for (var i = 0; i < operations.length; ++i) {
+                total += Number(operations[i].timeoutS || operations[i].timeout_s || 30) * 1000
+                if (operations[i].kind === "TimedConfirmation")
+                    total += Number(operations[i].params && operations[i].params.seconds || 0) * 1000
+            }
+            return Math.min(maximumMutationTimeoutMs, Math.max(30000, total))
+        }
+        return 10000
+    }
+
+    function buildApplyArgv(moduleId, revision, digest, confirmations) {
+        var argv = ["apply", moduleId, "--draft", "-", "--expected-revision", revision, "--plan-digest", digest]
+        var keys = confirmations || []
+        for (var i = 0; i < keys.length; ++i)
+            argv.push("--confirm", keys[i])
+        return argv
     }
 
     function finishRead(moduleId) {

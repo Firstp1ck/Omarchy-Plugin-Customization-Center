@@ -11,16 +11,20 @@ Item {
     property var backendClient: null
     property var transactionModel: null
     readonly property var transaction: transactionModel ? transactionModel.currentTransaction : null
-    readonly property bool active: transaction && transaction.state === "awaiting_confirmation"
+    readonly property bool active: gateLogic.active
+    readonly property string confirmationToken: gateLogic.confirmationToken
+    readonly property bool canConfirm: gateLogic.canConfirm
+    property ConfirmationGateLogic gateLogic: ConfirmationGateLogic {
+        backendClient: root.backendClient
+        transaction: root.transaction
+        onConfirmationFinished: function(result) {
+            if (result && result.ok && root.transactionModel)
+                root.transactionModel.refreshCurrent()
+        }
+    }
 
     function confirmCurrent() {
-        if (!active || !backendClient)
-            return
-        var confirmation = transaction.confirmation || ({})
-        backendClient.confirm(transaction.id, confirmation.token || "", function(result) {
-            if (result && result.ok && transactionModel)
-                transactionModel.refreshCurrent()
-        })
+        gateLogic.confirmCurrent()
     }
 
     function revertCurrent() {
@@ -90,6 +94,16 @@ Item {
                             onTriggered: parent.secondsLeft = Math.max(0, Math.ceil((parent.deadlineMs - Date.now()) / 1000))
                         }
                     }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !root.canConfirm
+                        text: "The confirmation token is not available yet. Keep settings is disabled; wait for the next status update or revert now."
+                        color: Color.urgent
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.bodySmall
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                    }
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: Style.spacing.md
@@ -103,6 +117,8 @@ Item {
                             text: "Keep settings"
                             bordered: true
                             focusable: true
+                            enabled: root.canConfirm
+                            tooltipText: root.canConfirm ? "Confirm these settings" : "Waiting for the confirmation token"
                             onClicked: root.confirmCurrent()
                         }
                     }

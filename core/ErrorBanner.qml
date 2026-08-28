@@ -12,7 +12,7 @@ Rectangle {
     readonly property var recoveryActions: recoveryFor(code)
     signal recoveryRequested(string action)
 
-    visible: code !== ""
+    visible: code !== "" && message !== ""
     color: Style.normalFillFor(Color.urgent, Color.accent)
     radius: Style.cornerRadius
     border.color: Style.normalBorderFor(Color.urgent, Color.accent)
@@ -20,6 +20,7 @@ Rectangle {
     implicitHeight: content.implicitHeight + Style.spacing.rowPaddingX * 2
 
     function messageFor(errorCode) {
+        if (errorCode === "superseded") return ""
         var messages = {
             stale_revision: "The source changed since this draft was loaded.",
             validation_failed: "The draft contains values that cannot be applied.",
@@ -45,7 +46,8 @@ Rectangle {
             confirmation_expired: "The confirmation deadline passed and rollback started.",
             unknown_module: "The requested module is not installed.",
             unknown_query: "The requested module query is not available.",
-            internal_error: "The backend encountered an unexpected error."
+            internal_error: "The backend encountered an unexpected error.",
+            superseded: ""
         }
         return messages[errorCode] || (errorCode ? "An error occurred: " + errorCode : "")
     }
@@ -76,7 +78,8 @@ Rectangle {
             confirmation_expired: ["Show rollback"],
             unknown_module: [],
             unknown_query: [],
-            internal_error: ["Show logs"]
+            internal_error: ["Show logs"],
+            superseded: []
         }
         return actions[errorCode] || []
     }

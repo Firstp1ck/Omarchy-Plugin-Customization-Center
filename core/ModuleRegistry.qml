@@ -14,6 +14,7 @@ Item {
     property string errorCode: ""
     property string errorMessage: ""
     property var pendingPayload: null
+    property var _statusPoll: null
     readonly property var selectedModule: moduleById(selectedModuleId)
     readonly property alias pageItem: pageLoader.item
 
@@ -58,6 +59,7 @@ Item {
     }
 
     function close() {
+        stopStatusPolling()
         opened = false
         pageLoader.source = ""
         modules = []
@@ -71,9 +73,12 @@ Item {
         if (!target)
             return false
         pendingPayload = payload || ({})
+        stopStatusPolling()
         selectedModuleId = moduleId
-        if (draftStore)
+        if (draftStore) {
             draftStore.activeModuleId = moduleId
+            draftStore.load(moduleId, function() { registry.updatePageProperties() })
+        }
         pageLoader.source = target.pageUrl || target.page || ""
         moduleSelected(moduleId)
         refreshStatus(moduleId)
@@ -97,14 +102,37 @@ Item {
         setBusy(moduleId, true)
         backendClient.status(moduleId, function(result) {
             setBusy(moduleId, false)
-            if (result && result.ok) {
-                var all = Object.assign({}, statusByModule)
-                all[moduleId] = result.data && result.data.status ? result.data.status : result.data
-                statusByModule = all
-                updatePageProperties()
-            }
+            acceptStatus(moduleId, result)
             if (callback) callback(result)
         })
+    }
+
+    function acceptStatus(moduleId, result) {
+        if (result && result.ok) {
+            var all = Object.assign({}, statusByModule)
+            all[moduleId] = result.data && result.data.status ? result.data.status : result.data
+            statusByModule = all
+            updatePageProperties()
+            var pending = result.data && result.data.pendingHandoffs ? result.data.pendingHandoffs : []
+            if (moduleId === selectedModuleId && pending.length > 0)
+                startStatusPolling(moduleId)
+            else if (moduleId === selectedModuleId)
+                stopStatusPolling()
+        }
+    }
+
+    function startStatusPolling(moduleId) {
+        if (_statusPoll || !backendClient)
+            return
+        _statusPoll = backendClient.pollStatus(moduleId, 2000, function(result) {
+            registry.acceptStatus(moduleId, result)
+        })
+    }
+
+    function stopStatusPolling() {
+        if (_statusPoll && backendClient)
+            backendClient.stopPolling(_statusPoll)
+        _statusPoll = null
     }
 
     function setBusy(moduleId, value) {
@@ -145,11 +173,7 @@ Item {
         function onRequestPlan() { registry.requestPlan(registry.selectedModuleId) }
         function onRequestApply() { registry.requestApply(registry.selectedModuleId) }
         function onRequestReset() { registry.requestReset(registry.selectedModuleId) }
-        function onDraftChanged(patch) {
-            if (patch !== undefined && registry.draftStore)
-                registry.draftStore.applyPatch(registry.selectedModuleId, patch)
-        }
-        function onDraftPatchChanged(patch) {
+        function onRequestDraftPatch(patch) {
             if (registry.draftStore)
                 registry.draftStore.applyPatch(registry.selectedModuleId, patch)
         }

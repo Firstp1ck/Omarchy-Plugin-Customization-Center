@@ -10,6 +10,7 @@ QtObject {
     readonly property int outputLimit: 8 * 1024 * 1024
     readonly property int stderrLineLimit: 200
     property var stderrByModule: ({})
+    property var _reconcilingHandoffs: ({})
     property bool _mutationActive: false
     property var _pollers: []
     property int _nextRequestId: 1
@@ -19,22 +20,8 @@ QtObject {
     signal requestFinished(int requestId, string command, string moduleId, var result)
     signal pendingHandoffReconciled(string transactionId, var result)
 
-    function timeoutFor(command, plan) {
-        if (["modules", "capabilities", "status", "history", "transaction", "confirm"].indexOf(command) >= 0)
-            return 10000
-        if (["validate", "plan", "query"].indexOf(command) >= 0)
-            return 30000
-        if (command === "apply" || command === "rollback") {
-            var total = 15000
-            var operations = plan && plan.operations ? plan.operations : []
-            for (var i = 0; i < operations.length; ++i) {
-                total += Number(operations[i].timeoutS || operations[i].timeout_s || 30) * 1000
-                if (operations[i].kind === "TimedConfirmation")
-                    total += Number(operations[i].params && operations[i].params.seconds || 0) * 1000
-            }
-            return Math.min(15 * 60 * 1000, Math.max(30000, total))
-        }
-        return 10000
+    function timeoutFor(command, plan, forceMaximum) {
+        return logic.timeoutFor(command, plan, forceMaximum)
     }
 
     function parseLastJsonLine(stdoutText) {
@@ -106,7 +93,19 @@ QtObject {
             _requestDone(request, errorResult("internal_error", "Could not create backend process", request.command, request.moduleId))
             return
         }
-        process.running = true
+        process.launch()
+    }
+
+    function _processStartFailed(process) {
+        if (process.completed)
+            return
+        process.completed = true
+        process.timeoutTimer.stop()
+        process.killTimer.stop()
+        var request = process.request
+        var result = errorResult("runtime_unavailable", "Backend executable could not be started: " + ccctlPath, request.command, request.moduleId)
+        process.destroy()
+        _requestDone(request, result)
     }
 
     function _processExited(process, exitCode) {
@@ -159,20 +158,40 @@ QtObject {
     }
 
     function modules(callback) { return call("modules", ["modules"], "", "", callback) }
-    function status(moduleId, callback) { return call("status", ["status", moduleId], moduleId, "", callback) }
+    function status(moduleId, callback) {
+        return call("status", ["status", moduleId], moduleId, "", function(result) {
+            _reconcilePendingFromStatus(result)
+            if (callback) callback(result)
+        })
+    }
     function history(callback) { return call("history", ["history", "--limit", "50"], "", "", callback) }
     function validate(moduleId, draft, callback) { return call("validate", ["validate", moduleId, "--draft", "-"], moduleId, JSON.stringify(draft || {}), callback) }
     function plan(moduleId, draft, callback) { return call("plan", ["plan", moduleId, "--draft", "-"], moduleId, JSON.stringify(draft || {}), callback) }
     function query(moduleId, name, args, callback) { return call("query", ["query", moduleId, name, "--args", "-"], moduleId, JSON.stringify(args || {}), callback) }
     function apply(moduleId, draft, revision, digest, confirmations, planData, callback) {
-        var argv = ["apply", moduleId, "--draft", "-", "--expected-revision", revision, "--plan-digest", digest]
-        var keys = confirmations || []
-        for (var i = 0; i < keys.length; ++i)
-            argv.push("--confirm", keys[i])
-        return call("apply", argv, moduleId, JSON.stringify(draft || {}), callback, { plan: planData || {} })
+        return call("apply", logic.buildApplyArgv(moduleId, revision, digest, confirmations), moduleId, JSON.stringify(draft || {}), callback, { plan: planData || {} })
     }
-    function rollback(transactionId, reason, callback) { return call("rollback", ["rollback", transactionId, "--reason", reason || "user"], "", "", callback) }
-    function confirm(transactionId, token, callback) { return call("confirm", ["confirm", transactionId, "--token", token], "", "", callback) }
+    function rollback(transactionId, reason, callback, planData) {
+        if (planData)
+            return call("rollback", ["rollback", transactionId, "--reason", reason || "user"], "", "", callback, { plan: planData })
+        logic.resolveRollbackPlan(transactionId, client, function(decision) {
+            if (decision.logLine)
+                _rememberStderr("", decision.logLine)
+            call("rollback", ["rollback", transactionId, "--reason", reason || "user"], "", "", callback, {
+                plan: decision.plan,
+                forceMaximumTimeout: decision.forceMaximumTimeout
+            })
+        })
+        return 0
+    }
+    function confirm(transactionId, token, callback) {
+        if (!token) {
+            var result = errorResult("confirmation_invalid", "Confirmation token is unavailable", "confirm", "")
+            if (callback) callback(result)
+            return 0
+        }
+        return call("confirm", ["confirm", transactionId, "--token", token], "", "", callback)
+    }
     function transaction(transactionId, callback) { return call("transaction", ["transaction", transactionId], "", "", callback) }
     function reconcile(transactionId, callback) { return call("reconcile", ["reconcile", transactionId], "", "", function(result) { pendingHandoffReconciled(transactionId, result); if (callback) callback(result) }) }
     function draftLoad(moduleId, callback) { return call("draft-load", ["draft", "load", moduleId], moduleId, "", callback) }
@@ -219,12 +238,24 @@ QtObject {
         }
     }
 
+    function _reconcileCallback(transactionId) {
+        return function() {
+            var remaining = Object.assign({}, client._reconcilingHandoffs)
+            delete remaining[transactionId]
+            client._reconcilingHandoffs = remaining
+        }
+    }
+
     function _reconcilePendingFromStatus(result) {
         var pending = result && result.data && result.data.pendingHandoffs ? result.data.pendingHandoffs : []
         for (var i = 0; i < pending.length; ++i) {
             var row = pending[i]
-            if (row && row.sentinelExists === true && row.id)
-                reconcile(row.id)
+            if (row && row.sentinelExists === true && row.id && !_reconcilingHandoffs[row.id]) {
+                var active = Object.assign({}, _reconcilingHandoffs)
+                active[row.id] = true
+                _reconcilingHandoffs = active
+                reconcile(row.id, _reconcileCallback(row.id))
+            }
         }
     }
 
@@ -237,7 +268,6 @@ QtObject {
             function trigger() {
                 if (pollKind === "status") {
                     client.status(target, function(result) {
-                        client._reconcilePendingFromStatus(result)
                         if (callback) callback(result)
                     })
                 } else {
@@ -257,6 +287,9 @@ QtObject {
             property string stderrText: ""
             property bool oversized: false
             property bool timedOut: false
+            property bool launchAttempted: false
+            property bool startedObserved: false
+            property bool completed: false
             command: [client.ccctlPath].concat(request ? request.argv : [])
             environment: ({ "OMARCHY_PATH": client.omarchyPath, "CC_CALLER": "overlay" })
             stdinEnabled: request && request.stdinText !== ""
@@ -267,6 +300,7 @@ QtObject {
                     if (data.length > client.outputLimit && !backendProcess.oversized) {
                         backendProcess.oversized = true
                         backendProcess.signal(15)
+                        killTimer.start()
                     }
                 }
             }
@@ -275,7 +309,7 @@ QtObject {
                 onDataChanged: backendProcess.stderrText = text
             }
             property Timer timeoutTimer: Timer {
-                interval: backendProcess.request ? client.timeoutFor(backendProcess.request.command, backendProcess.request.options.plan) : 10000
+                interval: backendProcess.request ? client.timeoutFor(backendProcess.request.command, backendProcess.request.options.plan, backendProcess.request.options.forceMaximumTimeout === true) : 10000
                 repeat: false
                 onTriggered: {
                     backendProcess.timedOut = true
@@ -289,16 +323,39 @@ QtObject {
                 repeat: false
                 onTriggered: if (backendProcess.running) backendProcess.signal(9)
             }
-            onStarted: {
+            property Timer startFailureTimer: Timer {
+                interval: 100
+                repeat: false
+                onTriggered: {
+                    if (backendProcess.launchAttempted && !backendProcess.startedObserved && !backendProcess.running)
+                        client._processStartFailed(backendProcess)
+                }
+            }
+            function launch() {
+                launchAttempted = true
                 timeoutTimer.start()
+                running = true
+                startFailureTimer.restart()
+            }
+            onStarted: {
+                startedObserved = true
+                startFailureTimer.stop()
                 if (request.stdinText !== "") {
                     write(request.stdinText)
                     stdinEnabled = false
                 }
             }
+            onRunningChanged: {
+                if (launchAttempted && !running && !startedObserved && !completed)
+                    startFailureTimer.restart()
+            }
             onExited: function(exitCode) {
+                if (completed)
+                    return
+                completed = true
                 timeoutTimer.stop()
                 killTimer.stop()
+                startFailureTimer.stop()
                 client._processExited(backendProcess, exitCode)
             }
         }

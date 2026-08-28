@@ -12,13 +12,25 @@ ColumnLayout {
     readonly property int renderedFieldCount: fieldRepeater.count
 
     signal valueChanged(string key, var value)
-    signal patchChanged(var patch)
+    signal requestDraftPatch(var patch)
     signal requestDeleteKey(string key)
 
     spacing: Style.spacing.panelGap
 
     function fieldTypeAt(index) {
         return index >= 0 && index < fields.length ? String(fields[index].type || "") : ""
+    }
+
+    function fieldAt(index) {
+        return fieldRepeater.itemAt(index)
+    }
+
+    function editValue(key, value) {
+        if (readOnly) return
+        var patch = ({})
+        patch[key] = value
+        valueChanged(key, value)
+        requestDraftPatch(patch)
     }
 
     Repeater {
@@ -32,10 +44,7 @@ ColumnLayout {
             readOnly: root.readOnly
             onValueEdited: function(key, value) {
                 if (root.readOnly) return
-                var patch = ({})
-                patch[key] = value
-                root.valueChanged(key, value)
-                root.patchChanged(patch)
+                root.editValue(key, value)
             }
             onRequestDeleteKey: function(key) {
                 if (!root.readOnly) root.requestDeleteKey(key)

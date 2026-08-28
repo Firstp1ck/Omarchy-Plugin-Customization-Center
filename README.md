@@ -32,13 +32,18 @@ omarchy-shell shell summon firstpick.customization-center '{"module":"bar"}'
 
 Runtime state is stored under the XDG configuration, state, cache, and runtime directories. The plugin does not write inside its own installation directory.
 
+## Page contract
+
+Module pages receive `draft` as read-only state and request changes by emitting `requestDraftPatch(patch)`. The name is intentionally distinct from QML's automatically generated `draftChanged()` property notifier. Pages must not assign to or mutate `draft` directly.
+
 ## Development
 
-Run the QML checks from the repository root:
+Run the QML checks from the repository root. Set `OMARCHY_SOURCE` to an Omarchy checkout at commit `71b0887c`; on the development host the tests fall back to `/mnt/SSD_NVME_4TB/GitHub/omarchy-fork` when the variable is unset.
 
 ```bash
-QML2_IMPORT_PATH=/mnt/SSD_NVME_4TB/GitHub/omarchy-fork/shell \
-QML_IMPORT_PATH=/mnt/SSD_NVME_4TB/GitHub/omarchy-fork/shell \
+export OMARCHY_SOURCE=/path/to/omarchy
+QML2_IMPORT_PATH="$OMARCHY_SOURCE/shell" \
+QML_IMPORT_PATH="$OMARCHY_SOURCE/shell" \
 python3 -m pytest -q -p no:cacheprovider tests/qml
 ```
 

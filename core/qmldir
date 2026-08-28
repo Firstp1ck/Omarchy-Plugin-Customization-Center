@@ -17,3 +17,4 @@ SchemaField 1.0 SchemaField.qml
 SearchField 1.0 SearchField.qml
 UndoToast 1.0 UndoToast.qml
 ConfirmationGate 1.0 ConfirmationGate.qml
+ConfirmationGateLogic 1.0 ConfirmationGateLogic.qml

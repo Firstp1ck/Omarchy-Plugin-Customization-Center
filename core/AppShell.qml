@@ -120,6 +120,12 @@ Item {
                         value: pageHost
                         when: root.moduleRegistry !== null
                     }
+                    Binding {
+                        target: root.moduleRegistry
+                        property: "visible"
+                        value: true
+                        when: root.moduleRegistry !== null
+                    }
                     Item {
                         id: pageHost
                         anchors.fill: parent

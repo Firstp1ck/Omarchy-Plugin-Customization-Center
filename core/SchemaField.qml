@@ -13,6 +13,7 @@ FormField {
     readonly property bool hasValue: values && Object.prototype.hasOwnProperty.call(values, keyName)
     readonly property var effectiveValue: hasValue ? values[keyName] : field.defaultValue
     readonly property string controlKind: String(field.type || "")
+    readonly property alias editorItem: editorLoader.item
 
     signal valueEdited(string key, var value)
     signal requestDeleteKey(string key)
@@ -26,6 +27,7 @@ FormField {
         spacing: Style.spacing.md
 
         Loader {
+            id: editorLoader
             Layout.fillWidth: true
             sourceComponent: {
                 switch (root.controlKind) {
@@ -53,18 +55,10 @@ FormField {
 
     Component {
         id: booleanEditor
-        RowLayout {
-            Ui.ToggleSwitch {
-                checked: Boolean(root.effectiveValue)
-                enabled: !root.readOnly
-                onToggled: root.valueEdited(root.keyName, !checked)
-            }
-            Text {
-                text: Boolean(root.effectiveValue) ? "On" : "Off"
-                color: Color.foreground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-            }
+        Ui.ToggleSwitch {
+            checked: Boolean(root.effectiveValue)
+            enabled: !root.readOnly
+            onToggled: root.valueEdited(root.keyName, !checked)
         }
     }
 

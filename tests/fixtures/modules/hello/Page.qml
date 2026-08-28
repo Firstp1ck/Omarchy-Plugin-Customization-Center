@@ -10,7 +10,7 @@ Item {
     signal requestPlan()
     signal requestApply()
     signal requestReset()
-    signal draftPatchChanged(var patch)
+    signal requestDraftPatch(var patch)
     signal requestNavigate(string moduleId, var payload)
 
     property var lastPayload: null

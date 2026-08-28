@@ -36,14 +36,22 @@ QtObject {
         })
     }
 
+    function transactionFromResult(result) {
+        if (!result || !result.ok || !result.data)
+            return null
+        var record = result.data.transaction ? Object.assign({}, result.data.transaction) : Object.assign({}, result.data)
+        if (result.data.confirmationToken)
+            record.confirmationToken = result.data.confirmationToken
+        if (result.data.confirmation)
+            record.confirmation = result.data.confirmation
+        return record
+    }
+
     function refreshCurrent(callback) {
         if (!backendClient)
             return
         backendClient.transaction("current", function(result) {
-            if (result && result.ok)
-                setCurrent(result.data && result.data.transaction ? result.data.transaction : result.data)
-            else
-                setCurrent(null)
+            setCurrent(transactionFromResult(result))
             if (callback) callback(result)
         })
     }
@@ -60,7 +68,7 @@ QtObject {
             return
         _currentPoll = backendClient.pollTransaction("current", intervalMs || 250, function(result) {
             if (result && result.ok)
-                setCurrent(result.data && result.data.transaction ? result.data.transaction : result.data)
+                setCurrent(transactionFromResult(result))
         })
     }
 
@@ -85,8 +93,7 @@ QtObject {
                 break
             }
         }
-        if (found || !pinnedRecovery)
-            pinnedRecovery = found
+        pinnedRecovery = found
     }
 
     readonly property bool applyBlocked: pinnedRecovery !== null

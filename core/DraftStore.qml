@@ -13,6 +13,7 @@ QtObject {
     property var _redoStacks: ({})
     property var _saveTimers: ({})
     readonly property int historyDepth: 100
+    property int autosaveDelayMs: 750
 
     signal draftUpdated(string moduleId, var draft)
     signal saveFailed(string moduleId, var result)
@@ -122,6 +123,12 @@ QtObject {
 
     function canUndo(moduleId) { return (_undoStacks[moduleId] || []).length > 0 }
     function canRedo(moduleId) { return (_redoStacks[moduleId] || []).length > 0 }
+    function undoDepth(moduleId) { return (_undoStacks[moduleId] || []).length }
+    function redoDepth(moduleId) { return (_redoStacks[moduleId] || []).length }
+    function hasPendingSave(moduleId) {
+        var timer = _saveTimers[moduleId]
+        return timer ? timer.running : false
+    }
 
     function undo(moduleId) {
         var key = moduleId || activeModuleId
@@ -228,7 +235,7 @@ QtObject {
     property Component saveTimerComponent: Component {
         Timer {
             property string moduleId: ""
-            interval: 750
+            interval: store.autosaveDelayMs
             repeat: false
             onTriggered: store.save(moduleId)
         }

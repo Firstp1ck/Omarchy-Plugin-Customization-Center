@@ -75,7 +75,6 @@ Item {
         id: moduleRegistry
         backendClient: backendClient
         draftStore: draftStore
-        visible: false
     }
 
     Variants {
