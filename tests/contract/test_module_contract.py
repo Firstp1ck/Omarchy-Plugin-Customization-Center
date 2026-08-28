@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,9 +17,133 @@ from customization_center.core.schema_check import load_and_validate, validate
 
 ROOT = Path(__file__).resolve().parents[2]
 IDS = [*MODULES, "hello"]
-SERVICE_MODULES = {"shell_ipc": "shell_ipc", "hyprctl": "hyprctl", "managed_block": "managed_block",
- "jsonc": "jsonc", "lua": "lua", "toml_writer": "toml_writer", "drafts": "drafts",
- "settings_schema": "settings_schema", "catalog": "catalog"}
+SERVICE_MODULES = {
+    "shell_ipc": {"shell_ipc"},
+    "hyprctl": {"hyprctl"},
+    "managed_block": {"managed_block"},
+    "jsonc": {"jsonc"},
+    "lua": {"lua", "lua_string", "luac_check"},
+    "toml_writer": {"toml_writer"},
+    "drafts": {"drafts"},
+    "registry": {"registry"},
+    "settings_schema": {"settings_schema"},
+    "catalog": {"catalog"},
+}
+CORE_PACKAGE = "customization_center.core"
+FORBIDDEN_IMPORTS = {"subprocess", "shutil", "tempfile", "socket"}
+FORBIDDEN_OS_IMPORTS = {"system", "popen", "open"}
+FORBIDDEN_CALL_ATTRIBUTES = {
+    "write_text", "write_bytes", "unlink", "mkdir", "rmdir", "symlink", "touch", "chmod", "lchmod",
+    "link", "hardlink_to", "symlink_to",
+}
+FORBIDDEN_FILESYSTEM_CALL_ATTRIBUTES = {
+    "replace", "rename", "remove", "removedirs", "makedirs", "rmtree", "copy", "copy2", "copyfile",
+    "copytree", "move",
+}
+FORBIDDEN_OS_CALL_ATTRIBUTES = {"system", "popen", "open"}
+FILESYSTEM_RECEIVER_ROOTS = {"os", "shutil", "pathlib", "Path"}
+
+
+class _BackendContractVisitor(ast.NodeVisitor):
+    def __init__(self, source_path: Path, backend: Path):
+        self.source_path = source_path
+        self.backend = backend
+        self.violations: list[str] = []
+        self.service_uses: dict[str, tuple[Path, int]] = {}
+
+    def _error(self, node: ast.AST, message: str) -> None:
+        self.violations.append(f"{self.source_path.relative_to(ROOT)}:{node.lineno}: {message}")
+
+    def _use_service(self, service: str, node: ast.AST) -> None:
+        self.service_uses.setdefault(service, (self.source_path, node.lineno))
+
+    def _check_import_name(self, node: ast.AST, name: str) -> None:
+        root = name.split(".")[0]
+        if root not in sys.stdlib_module_names and not (name == CORE_PACKAGE or name.startswith(f"{CORE_PACKAGE}.")):
+            self._error(node, f"disallowed import {name}")
+        if root in FORBIDDEN_IMPORTS:
+            self._error(node, f"forbidden import {name}")
+        if name in {f"os.{item}" for item in FORBIDDEN_OS_IMPORTS}:
+            self._error(node, f"forbidden import {name}")
+
+    def _record_core_import(self, node: ast.ImportFrom | ast.Import, name: str) -> None:
+        if name == CORE_PACKAGE:
+            return
+        if name.startswith(f"{CORE_PACKAGE}."):
+            service_name = name.removeprefix(f"{CORE_PACKAGE}.").split(".")[0]
+            for service, import_names in SERVICE_MODULES.items():
+                if service_name in import_names:
+                    self._use_service(service, node)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            self._check_import_name(node, alias.name)
+            self._record_core_import(node, alias.name)
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.level:
+            parent = self.source_path.parent
+            for _ in range(node.level - 1):
+                parent = parent.parent
+            if not parent.is_relative_to(self.backend):
+                self._error(node, "relative import escapes the backend package")
+        elif node.module is not None:
+            self._check_import_name(node, node.module)
+            self._record_core_import(node, node.module)
+            if node.module == "os" and any(alias.name in FORBIDDEN_OS_IMPORTS or alias.name == "*"
+                                       for alias in node.names):
+                self._error(node, f"forbidden import from {node.module}")
+            if node.module == CORE_PACKAGE:
+                for alias in node.names:
+                    for service, import_names in SERVICE_MODULES.items():
+                        if alias.name in import_names:
+                            self._use_service(service, node)
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        if isinstance(node.value, ast.Name):
+            if node.value.id == "ctx" and node.attr in {"shell", "hyprctl", "registry"}:
+                self._use_service({"shell": "shell_ipc", "hyprctl": "hyprctl", "registry": "registry"}[node.attr], node)
+            elif node.value.id == "ops" and node.attr == "TimedConfirmation":
+                self._use_service("timed_confirmation", node)
+            elif node.value.id == "ops" and node.attr == "TerminalHandoff":
+                self._use_service("terminal_handoff", node)
+            elif node.value.id == "paths" and node.attr == "staging_dir":
+                self._use_service("staging", node)
+        self.generic_visit(node)
+
+    @staticmethod
+    def _receiver_root(receiver: ast.expr) -> str | None:
+        while isinstance(receiver, ast.Attribute):
+            receiver = receiver.value
+        return receiver.id if isinstance(receiver, ast.Name) else None
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if isinstance(node.func, ast.Name) and node.func.id == "open":
+            mode = node.args[1] if len(node.args) > 1 else next(
+                (keyword.value for keyword in node.keywords if keyword.arg == "mode"), None)
+            if isinstance(mode, ast.Constant) and isinstance(mode.value, str) and any(flag in mode.value for flag in "wa+"):
+                self._error(node, f"forbidden write mode for open: {mode.value!r}")
+        elif isinstance(node.func, ast.Attribute):
+            receiver_root = self._receiver_root(node.func.value)
+            if node.func.attr in FORBIDDEN_CALL_ATTRIBUTES:
+                self._error(node, f"forbidden call to {node.func.attr}")
+            elif node.func.attr in FORBIDDEN_FILESYSTEM_CALL_ATTRIBUTES and receiver_root in FILESYSTEM_RECEIVER_ROOTS:
+                self._error(node, f"forbidden call to {node.func.attr}")
+            elif node.func.attr in FORBIDDEN_OS_CALL_ATTRIBUTES and receiver_root == "os":
+                self._error(node, f"forbidden call to {node.func.attr}")
+        self.generic_visit(node)
+
+
+def _backend_sources(module_id: str) -> list[Path]:
+    return sorted((_directory(module_id) / "backend").rglob("*.py"))
+
+
+def _relative_imports_stay_in_backend(tree: ast.AST, source_path: Path, backend: Path) -> _BackendContractVisitor:
+    visitor = _BackendContractVisitor(source_path, backend)
+    visitor.visit(tree)
+    return visitor
 
 
 def _directory(module_id: str) -> Path:
@@ -58,21 +183,19 @@ def test_registered_module_contract(module_id, isolated_home):
 @pytest.mark.parametrize("module_id", IDS)
 def test_imports_and_declared_services(module_id):
     directory = _directory(module_id); metadata = json.loads((directory / "module.json").read_text())
-    source = (directory / "backend/__init__.py").read_text(); tree = ast.parse(source)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module not in {"__future__", "customization_center.core"}:
-            raise AssertionError(f"disallowed import from {node.module}")
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                assert alias.name.split(".")[0] in {"json", "re", "hashlib", "base64", "math", "typing", "dataclasses"}
+    backend = directory / "backend"; visitors = []
+    for source_path in _backend_sources(module_id):
+        tree = ast.parse(source_path.read_text(), filename=str(source_path))
+        visitors.append(_relative_imports_stay_in_backend(tree, source_path, backend))
+
+    violations = [violation for visitor in visitors for violation in visitor.violations]
     declared = set(metadata["coreServices"])
-    for service, module_name in SERVICE_MODULES.items():
-        if f"import {module_name}" in source or f" {module_name}," in source:
-            assert service in declared
-    if "ctx.registry" in source: assert "registry" in declared
-    if "ops.TimedConfirmation" in source: assert "timed_confirmation" in declared
-    if "ops.TerminalHandoff" in source: assert "terminal_handoff" in declared
-    if "paths.staging_dir" in source: assert "staging" in declared
+    for visitor in visitors:
+        for service, (source_path, line) in visitor.service_uses.items():
+            if service not in declared:
+                violations.append(f"{source_path.relative_to(ROOT)}:{line}: core service {service} is not declared")
+    if violations:
+        pytest.fail("\n".join(violations))
 
 
 def _minimal(schema, version=1):
