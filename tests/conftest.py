@@ -129,6 +129,13 @@ class Stubs:
                         except (TypeError, ValueError):
                             parameters = 1
                         reply = handler(request) if parameters == 1 else handler(request["argv"], request["stdin"], request["env"])
+                    elif isinstance(handler, dict) and "byArgs" in handler:
+                        reply = {key: value for key, value in handler.items() if key != "byArgs"}
+                        for candidate in handler["byArgs"]:
+                            args = candidate.get("args", [])
+                            if request["argv"][1:len(args) + 1] == args:
+                                reply.update({key: value for key, value in candidate.items() if key != "args"})
+                                break
                     else:
                         reply = handler
                     if isinstance(reply, tuple):

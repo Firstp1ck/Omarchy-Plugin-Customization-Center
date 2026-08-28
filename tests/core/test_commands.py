@@ -17,6 +17,16 @@ def test_argv_only_minimal_env_unset_and_stdin(stub_command, monkeypatch):
     with pytest.raises(TypeError): runner.run("show", 1)
 
 
+def test_stub_command_by_args_uses_the_first_prefix_match(stub_command):
+    stub_command("check", {"exit_code": 3, "stdout": "default", "byArgs": [
+        {"args": ["ping"], "stdout": "first"},
+        {"args": ["ping", "extra"], "stdout": "later"},
+    ]})
+    runner = CommandRunner()
+    assert runner.run(["check", "ping", "extra"], 1).stdout == "first"
+    assert runner.run(["check", "other"], 1).exit_code == 3
+
+
 def test_mode_allowlists(stub_command):
     stub_command("check", {"stdout": "ok"})
     runner = CommandRunner(mode="validate")

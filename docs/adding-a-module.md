@@ -38,6 +38,8 @@ Emit `requestDraftPatch` with a JSON merge patch. Never assign to `draft`, insta
 
 Put a valid sample at `tests/fixtures/sample-draft.json` inside the module's test directory, as hello does. The contract suite validates metadata and schemas, runs the protocol without writes, validates every operation and confirmation, checks imports, and exercises executor rollback. Module tests should add parser edge cases and assertions specific to the module.
 
+To stub commands or seed files for the isolated contract home, add `tests/fixtures/contract-stubs.json`, for example `{"hello-command":{"exit_code":0,"stdout":"","stderr":"","byArgs":[{"args":["ping"],"stdout":"ok"}]},"files":{".config/hypr/monitors.lua":"monitors.lua"}}`; command entries provide defaults, and `byArgs` matches the argv after the command name by prefix with the first match winning, while `files` copies fixture-relative sources to paths under the isolated home.
+
 Run:
 
 ```sh

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -154,9 +155,42 @@ def _registry(paths: Paths):
     return load_registry(ROOT, [ROOT / "tests/fixtures/modules/hello"], paths)
 
 
+def _install_contract_stubs(directory: Path, isolated_home: Path, request) -> None:
+    fixture = directory / "tests/fixtures/contract-stubs.json"
+    if not fixture.is_file():
+        return
+    stubs = json.loads(fixture.read_text())
+    for home_relative, fixture_relative in stubs.pop("files", {}).items():
+        source = (fixture.parent / fixture_relative).resolve()
+        destination = (isolated_home / home_relative).resolve()
+        assert source.is_relative_to(fixture.parent.resolve())
+        assert destination.is_relative_to(isolated_home.resolve())
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    stub_command = request.getfixturevalue("stub_command")
+    for name, handler in stubs.items():
+        stub_command(name, handler)
+
+
+def test_contract_stubs_copy_files(tmp_path, isolated_home, request):
+    directory = tmp_path / "module"
+    fixture_dir = directory / "tests/fixtures"
+    fixture_dir.mkdir(parents=True)
+    (fixture_dir / "seed.lua").write_text("monitor = {}\n")
+    (fixture_dir / "contract-stubs.json").write_text(json.dumps({
+        "files": {".config/hypr/monitors.lua": "seed.lua"},
+    }))
+
+    _install_contract_stubs(directory, isolated_home, request)
+
+    assert (isolated_home / ".config/hypr/monitors.lua").read_text() == "monitor = {}\n"
+
+
 @pytest.mark.parametrize("module_id", IDS)
-def test_registered_module_contract(module_id, isolated_home):
-    paths = Paths.from_env(); directory = _directory(module_id); registry = _registry(paths)
+def test_registered_module_contract(module_id, isolated_home, request):
+    directory = _directory(module_id)
+    _install_contract_stubs(directory, isolated_home, request)
+    paths = Paths.from_env(); registry = _registry(paths)
     metadata = load_and_validate(directory / "module.json", ROOT / "schemas/module-v1.json")
     entry = registry.view.entry(module_id); module = entry.module
     assert module.id == directory.name == metadata["id"]
