@@ -39,10 +39,17 @@ def test_invalid_extra_template_is_registry_warning(isolated_home, tmp_path):
     assert "unsafe" not in registry.entries and len(registry.warnings) == 1
 
 
-def test_module_id_mismatch_is_registry_warning(isolated_home, tmp_path):
+def test_module_id_mismatch_is_registry_warning(isolated_home, tmp_path, monkeypatch):
     repo = Path(__file__).resolve().parents[2]
+    hello = repo / "tests/fixtures/modules/hello"
     module = _copy_hello(tmp_path, repo, "mismatch")
     data = json.loads((module / "module.json").read_text()); data["id"] = "different"
     (module / "module.json").write_text(json.dumps(data))
-    registry = load_registry(repo, [module], Paths.from_env())
-    assert not registry.entries and len(registry.warnings) == 1
+    monkeypatch.setattr("customization_center.modules.MODULES", ["hello", "mismatch"])
+    registry = load_registry(repo, [hello, module], Paths.from_env())
+    assert set(registry.entries) == {"hello"}
+    assert registry.module("hello").id == "hello"
+    assert len(registry.warnings) == 1
+    warning, = registry.warnings
+    assert warning.code == "registry"
+    assert "Module mismatch is unavailable" in warning.message

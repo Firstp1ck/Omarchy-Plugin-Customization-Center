@@ -23,8 +23,10 @@ def test_cli_hello_end_to_end_and_envelopes(isolated_home, stub_command, monkeyp
     stub_command("hello-command", {"exit_code": 0})
     monkeypatch.setenv("CC_EXTRA_MODULE_DIRS", str(ROOT / "tests/fixtures/modules/hello"))
     completed, modules = _run(["modules"]); assert completed.returncode == 0
-    row = modules["data"]["modules"][0]
-    assert row["id"] == "hello" and row["pageUrl"].startswith("file://") and "recovery" in modules["data"]
+    hello_rows = [row for row in modules["data"]["modules"] if row["id"] == "hello"]
+    assert len(hello_rows) == 1
+    row = hello_rows[0]
+    assert row["pageUrl"].startswith("file://") and "recovery" in modules["data"]
     _, doctor = _run(["doctor"]); assert doctor["data"]["bytecodeDisabled"] and doctor["data"]["pythonSupported"]
     _, status = _run(["status", "hello"]); revision = status["revision"]
     raw = SAMPLE.read_text()
