@@ -30,7 +30,7 @@ All imports come from `customization_center.core` or the Python standard library
 
 ## 4. Implement the page
 
-The fixture page is an `Item` with `moduleId`, `status`, `capabilities`, `draft`, and `busy` properties. It declares `requestPlan()`, `requestApply()`, `requestReset()`, `requestDraftPatch(var patch)`, and `requestNavigate(string moduleId, var payload)`. It implements `focusFirst()` and `handlePayload(payload)`.
+The fixture page is an `Item` with `moduleId`, `status`, `capabilities`, `draft`, and `busy` properties. A page that needs read-only previews may also declare `property var backendClient: null`; the registry supplies it for `query` calls only, and the page must not reassign it or use it for mutations. It declares `requestPlan()`, `requestApply()`, `requestReset()`, `requestDraftPatch(var patch)`, and `requestNavigate(string moduleId, var payload)`. It implements `focusFirst()` and `handlePayload(payload)`.
 
 Emit `requestDraftPatch` with a JSON merge patch. Never assign to `draft`, instantiate `Process` or `FileView`, or call apply directly from a page.
 

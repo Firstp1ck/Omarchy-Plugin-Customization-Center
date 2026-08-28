@@ -34,7 +34,7 @@ Runtime state is stored under the XDG configuration, state, cache, and runtime d
 
 ## Page contract
 
-Module pages receive `draft` as read-only state and request changes by emitting `requestDraftPatch(patch)`. The name is intentionally distinct from QML's automatically generated `draftChanged()` property notifier. Pages must not assign to or mutate `draft` directly.
+Module pages receive `draft` as read-only state and request changes by emitting `requestDraftPatch(patch)`. The name is intentionally distinct from QML's automatically generated `draftChanged()` property notifier. Pages must not assign to or mutate `draft` directly. Pages may optionally declare `property var backendClient: null` to receive the registry client for read-only `query` previews and must not reassign it or use it for mutations.
 
 ## Development
 

@@ -147,6 +147,8 @@ Item {
         if (!page)
             return
         page.moduleId = selectedModuleId
+        if ("backendClient" in page)
+            page.backendClient = backendClient
         page.status = statusByModule[selectedModuleId] || null
         page.capabilities = selectedModule && selectedModule.capabilities ? selectedModule.capabilities : ({})
         page.draft = draftStore ? draftStore.draftFor(selectedModuleId) : ({})

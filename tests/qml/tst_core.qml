@@ -128,6 +128,25 @@ TestCase {
         legacy.destroy()
     }
 
+    function test_registryInjectsBackendClientWhenDeclared() {
+        var backend = createTemporaryObject(fakeBackendComponent, testCase)
+        var registry = createTemporaryObject(registryComponent, testCase, { backendClient: backend })
+        registry.modules = [{ id: "query-page", title: "Query page", pageUrl: Qt.resolvedUrl("fixtures/BackendClientPage.qml"), capabilities: ({}) }]
+        verify(registry.select("query-page", {}))
+        tryVerify(function() { return registry.pageItem !== null })
+        compare(registry.pageItem.backendClient, backend)
+    }
+
+    function test_registryLoadsPageWithoutBackendClientProperty() {
+        var backend = createTemporaryObject(fakeBackendComponent, testCase)
+        var registry = createTemporaryObject(registryComponent, testCase, { backendClient: backend })
+        registry.modules = [{ id: "hello", title: "Hello", pageUrl: Qt.resolvedUrl("../fixtures/modules/hello/Page.qml"), capabilities: ({}) }]
+        verify(registry.select("hello", {}))
+        tryVerify(function() { return registry.pageItem !== null })
+        compare(registry.pageItem.moduleId, "hello")
+        compare(registry.pageItem.status.value, 7)
+    }
+
     function test_selectedPageVisibleAndPersistedDraftRestored() {
         var backend = createTemporaryObject(fakeBackendComponent, testCase)
         var store = createTemporaryObject(draftStoreComponent, testCase, { backendClient: backend })
