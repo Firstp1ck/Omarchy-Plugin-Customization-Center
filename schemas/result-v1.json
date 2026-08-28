@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "result-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "ok", "command", "module", "revision", "data", "warnings", "errors", "transactionId", "durationMs"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1}, "ok": {"type": "boolean"}, "command": {"type": "string"},
+    "module": {"type": ["string", "null"]}, "revision": {"type": ["string", "null"]},
+    "data": {"type": ["object", "null"]}, "warnings": {"type": "array", "items": {"$ref": "#/$defs/warning"}},
+    "errors": {"type": "array", "items": {"$ref": "#/$defs/error"}},
+    "transactionId": {"type": ["string", "null"]}, "durationMs": {"type": "integer", "minimum": 0}
+  },
+  "$defs": {
+    "warning": {"type": "object", "required": ["code", "message"], "additionalProperties": false,
+      "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "path": {"type": "string"}, "recovery": {"type": "string"}, "ack": {"type": "boolean"}}},
+    "error": {"type": "object", "required": ["code", "message"], "additionalProperties": false,
+      "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "pointer": {"type": "string"}, "operationId": {"type": "string"}, "data": {"type": "object"}}}
+  }
+}

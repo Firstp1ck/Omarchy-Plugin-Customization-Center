@@ -1,0 +1,9 @@
+module qs.Ui
+Button 1.0 Button.qml
+TextField 1.0 TextField.qml
+ToggleSwitch 1.0 ToggleSwitch.qml
+NumberField 1.0 NumberField.qml
+Dropdown 1.0 Dropdown.qml
+SearchableDropdown 1.0 SearchableDropdown.qml
+MultiSelect 1.0 MultiSelect.qml
+BorderSurface 1.0 BorderSurface.qml

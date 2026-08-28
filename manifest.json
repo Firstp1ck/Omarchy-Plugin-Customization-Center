@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "firstpick.customization-center",
+  "name": "Customization Center",
+  "version": "0.1.0",
+  "author": "Firstpick",
+  "description": "Graphical runtime customization for Omarchy",
+  "kinds": ["overlay"],
+  "entryPoints": {
+    "overlay": "CustomizationCenter.qml"
+  }
+}

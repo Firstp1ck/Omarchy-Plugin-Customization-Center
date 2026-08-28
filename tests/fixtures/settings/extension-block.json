@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "acme.service",
+  "name": "Acme service",
+  "kinds": ["service"],
+  "entryPoints": {"service": "Service.qml"},
+  "customizationCenter": {
+    "settingsVersion": 1,
+    "scope": "shell-entry",
+    "schema": [
+      {
+        "key": "interval",
+        "type": "integer",
+        "label": "Refresh interval",
+        "minimum": 5,
+        "maximum": 3600,
+        "default": 60
+      }
+    ]
+  }
+}

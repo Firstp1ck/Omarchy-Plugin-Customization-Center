@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "draft-envelope-v1.json", "type": "object",
+  "required": ["schemaVersion", "module", "baseRevision", "updatedAt", "draft"], "additionalProperties": false,
+  "properties": {"schemaVersion": {"const": 1}, "module": {"type": "string"}, "baseRevision": {"type": "string"},
+    "updatedAt": {"type": "string", "format": "date-time"}, "draft": {"type": "object"}}
+}

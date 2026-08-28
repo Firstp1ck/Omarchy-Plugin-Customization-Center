@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "plan-v1.json", "type": "object",
+  "required": ["schemaVersion", "moduleId", "expectedRevision", "operations", "claims", "summary", "warnings", "requiresConfirmation", "residualSideEffects", "segments", "planDigest"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1}, "moduleId": {"type": "string"}, "expectedRevision": {"type": "string"},
+    "operations": {"type": "array", "items": {"$ref": "#/$defs/operation"}},
+    "claims": {"type": "array", "items": {"$ref": "#/$defs/claim"}}, "summary": {"type": "string"},
+    "warnings": {"type": "array", "items": {"$ref": "#/$defs/warning"}},
+    "requiresConfirmation": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "residualSideEffects": {"type": "array", "items": {"type": "string"}},
+    "segments": {"type": "array", "items": {"$ref": "#/$defs/segment"}}, "planDigest": {"type": "string"}
+  },
+  "$defs": {
+    "operation": {"type": "object", "required": ["id", "moduleId", "kind", "params", "summary", "inverse", "backupPaths", "timeoutS", "detail"], "additionalProperties": false,
+      "properties": {"id": {"type": "string"}, "moduleId": {"type": "string"}, "kind": {"enum": ["WriteFileAtomic", "ReplaceManagedBlock", "EnsureDirectory", "ReplaceDirectoryAtomic", "RunCommand", "RestoreBackup", "RemoveFile", "ShellIpc", "HyprctlReload", "TimedConfirmation", "TerminalHandoff"]}, "params": {"type": "object"}, "summary": {"type": "string"},
+      "inverse": {"oneOf": [{"$ref": "#/$defs/operation"}, {"type": "array", "items": {"$ref": "#/$defs/operation"}}, {"type": "null"}]},
+      "backupPaths": {"type": "array", "items": {"type": "string"}}, "timeoutS": {"type": "number", "exclusiveMinimum": 0}, "detail": {"type": ["object", "null"]}}},
+    "claim": {"type": "object", "required": ["key", "access"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "access": {"enum": ["exclusive", "shared"]}}},
+    "segment": {"type": "object", "required": ["moduleId", "expectedRevision", "operationIds"], "additionalProperties": false, "properties": {"moduleId": {"type": "string"}, "expectedRevision": {"type": "string"}, "operationIds": {"type": "array", "items": {"type": "string"}}}},
+    "warning": {"type": "object", "required": ["code", "message", "path", "recovery", "ack"], "additionalProperties": false, "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "path": {"type": "string"}, "recovery": {"type": "string"}, "ack": {"type": "boolean"}}}
+  }
+}

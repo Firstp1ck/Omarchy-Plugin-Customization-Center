@@ -1,0 +1,19 @@
+module CustomizationCenter.Core
+AppShell 1.0 AppShell.qml
+Sidebar 1.0 Sidebar.qml
+ModuleRegistry 1.0 ModuleRegistry.qml
+BackendClient 1.0 BackendClient.qml
+BackendLogic 1.0 BackendLogic.qml
+DraftStore 1.0 DraftStore.qml
+TransactionModel 1.0 TransactionModel.qml
+ApplyBar 1.0 ApplyBar.qml
+ChangeList 1.0 ChangeList.qml
+ConfirmDialog 1.0 ConfirmDialog.qml
+DiffView 1.0 DiffView.qml
+ErrorBanner 1.0 ErrorBanner.qml
+FormField 1.0 FormField.qml
+SchemaForm 1.0 SchemaForm.qml
+SchemaField 1.0 SchemaField.qml
+SearchField 1.0 SearchField.qml
+UndoToast 1.0 UndoToast.qml
+ConfirmationGate 1.0 ConfirmationGate.qml

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "transaction-v1.json", "type": "object",
+  "required": ["schemaVersion", "id", "module", "state", "createdAt", "updatedAt", "plan", "beforeRevision", "afterRevision", "completedOperationIds", "rolledBackOperationIds", "backups", "verify", "confirmation", "errors", "rollbackErrors"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1}, "id": {"type": "string", "format": "uuid"}, "module": {"type": "string"},
+    "state": {"enum": ["applying", "awaiting_confirmation", "pending_handoff", "committed", "rolling_back", "rolled_back", "rollback_failed"]},
+    "reason": {"type": ["string", "null"], "enum": ["user", "timeout", "recovery", "verification", "operation", "handoff_failed", null]},
+    "createdAt": {"type": "string", "format": "date-time"}, "updatedAt": {"type": "string", "format": "date-time"},
+    "plan": {"$ref": "plan-v1.json"}, "beforeRevision": {"type": "string"}, "afterRevision": {"type": ["string", "null"]},
+    "completedOperationIds": {"type": "array", "items": {"type": "string"}}, "rolledBackOperationIds": {"type": "array", "items": {"type": "string"}},
+    "skippedInverseIds": {"type": "array", "items": {"type": "object", "required": ["operationId", "why"], "additionalProperties": false, "properties": {"operationId": {"type": "string"}, "why": {"enum": ["nonreversible", "rollback_conflict"]}}}},
+    "backups": {"type": "object", "additionalProperties": {"type": "object", "required": ["backupId", "existed"], "additionalProperties": false, "properties": {"backupId": {"type": "string"}, "sha256": {"type": ["string", "null"]}, "mode": {"type": ["string", "null"]}, "existed": {"type": "boolean"}}}},
+    "verify": {"type": ["object", "null"]}, "residualSideEffects": {"type": "array", "items": {"type": "string"}},
+    "confirmation": {"type": ["object", "null"], "additionalProperties": false, "properties": {"unit": {"type": "string"}, "armedAt": {"type": "string", "format": "date-time"}, "deadline": {"type": ["string", "null"], "format": "date-time"}, "tokenSha256": {"type": ["string", "null"]}, "status": {"enum": ["armed", "confirmed", "expired", "cancelled"]}}},
+    "commandLog": {"type": "array", "items": {"type": "object", "required": ["operationId", "argv", "exit", "durationMs"], "additionalProperties": false, "properties": {"operationId": {"type": "string"}, "argv": {"type": "array", "items": {"type": "string"}}, "exit": {"type": ["integer", "null"]}, "durationMs": {"type": "integer", "minimum": 0}, "stdoutHead": {"type": "string", "maxLength": 4096}, "stderrHead": {"type": "string", "maxLength": 4096}, "timedOut": {"type": "boolean"}}}},
+    "errors": {"type": "array", "items": {"$ref": "#/$defs/journalError"}}, "rollbackErrors": {"type": "array", "items": {"$ref": "#/$defs/journalError"}}
+  },
+  "$defs": {
+    "journalError": {"type": "object", "required": ["code", "message"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "operationId": {"type": "string"}, "at": {"type": "string", "format": "date-time"}, "resolved": {"type": "boolean"}, "data": {"type": "object"}}}
+  }
+}
