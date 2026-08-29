@@ -23,7 +23,8 @@
           "default": {"type": ["string", "null"]}, "current": {"type": "object"},
           "checks": {"type": "array", "items": {"type": "object"}},
           "choices": {"type": "array", "items": {"type": "object"}},
-          "pending": {"type": ["object", "null"]}, "drifted": {"type": "boolean"}, "probeError": {"type": ["object", "null"]}
+          "pending": {"type": ["object", "null"]}, "outcome": {"type": ["object", "null"]},
+          "drifted": {"type": "boolean"}, "probeError": {"type": ["object", "null"]}
         }
       }
     }

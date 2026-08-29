@@ -20,20 +20,60 @@ def _paths(ctx: Any) -> dict[str, Path]:
     }
 
 
-def _pending(ctx: Any) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
-    all_pending: list[dict[str, Any]] = []
-    by_category: dict[str, dict[str, Any]] = {}
-    for tx in ctx.journal.history(module="defaults", limit=100, state="pending_handoff"):
-        terminal = next((op for op in tx.plan.operations if op.kind == "TerminalHandoff"), None)
-        detail = terminal.detail if terminal and terminal.detail else {}
+def _transaction_categories(tx: Any) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for operation in tx.plan.operations:
+        detail = operation.detail or {}
         category_id = str(detail.get("category", ""))
-        item = {"id": tx.id, "sentinelExists": (ctx.paths.state / "handoffs" / (tx.id + ".json")).is_file()}
-        all_pending.append(item)
         if category_id:
-            by_category[category_id] = {"transactionId": tx.id, "choice": detail.get("choice", ""),
-                                        "startedAt": tx.created_at, "argv": terminal.params.get("argv", []) if terminal else [],
-                                        "lastReconciledAt": tx.updated_at}
-    return all_pending, by_category
+            result[category_id] = detail
+    return result
+
+
+def _journal_projection(ctx: Any) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    all_pending: list[dict[str, Any]] = []
+    pending_by_category: dict[str, dict[str, Any]] = {}
+    outcomes: dict[str, dict[str, Any]] = {}
+    for tx in ctx.journal.history(module="defaults", limit=100):
+        transaction_categories = _transaction_categories(tx)
+        if tx.state == "pending_handoff":
+            terminal = next((op for op in tx.plan.operations if op.kind == "TerminalHandoff"), None)
+            detail = terminal.detail if terminal and terminal.detail else {}
+            category_id = str(detail.get("category", ""))
+            all_pending.append({"id": tx.id,
+                                "sentinelExists": (ctx.paths.state / "handoffs" / (tx.id + ".json")).is_file()})
+            if category_id and category_id not in pending_by_category:
+                pending_by_category[category_id] = {
+                    "transactionId": tx.id, "choice": detail.get("choice", ""),
+                    "startedAt": tx.created_at, "argv": terminal.params.get("argv", []) if terminal else [],
+                    "lastReconciledAt": tx.updated_at,
+                }
+        for category_id, detail in transaction_categories.items():
+            if category_id in outcomes:
+                continue
+            if tx.state == "rollback_failed":
+                affected_paths = sorted({str(path) for error in tx.rollback_errors
+                                         for path in error.get("affectedPaths", [])})
+                outcomes[category_id] = {
+                    "state": "rollback_failed", "transactionId": tx.id, "choice": detail.get("choice", ""),
+                    "reason": tx.reason or "rollback", "failedChecks": [], "paths": affected_paths,
+                    "recoveryCommands": [f"ccctl restore {tx.id} --path {path}" for path in affected_paths
+                                         if path in tx.backups],
+                }
+            elif tx.state == "rolled_back" and tx.reason == "verification" and tx.verify:
+                code = tx.verify.code or "defaults_verification_failed"
+                evidence_category = str(tx.verify.evidence.get("category", ""))
+                category_code = code if not evidence_category or evidence_category == category_id else "defaults_verification_failed"
+                outcomes[category_id] = {
+                    "state": "installed_not_set" if category_code == "defaults_installed_not_set" else "verify_failed",
+                    "transactionId": tx.id, "choice": detail.get("choice", ""), "code": category_code,
+                    "reason": tx.verify.reason if category_code == code else "Another default failed verification; this change was restored",
+                    "failedChecks": tx.verify.evidence.get("failedChecks", []) if category_code == code else [],
+                    "paths": [], "recoveryCommands": [],
+                }
+            else:
+                outcomes[category_id] = {"state": "", "transactionId": tx.id}
+    return all_pending, pending_by_category, outcomes
 
 
 def _checks(category_data: dict[str, Any], current: dict[str, Any] | None, raw: dict[str, Any],
@@ -57,8 +97,11 @@ def _checks(category_data: dict[str, Any], current: dict[str, Any] | None, raw: 
              "expected": expected["desktopId"], "actual": raw.get("preference", "")},
         ))
     elif category_id in {"editor", "agent"}:
-        checks.append({"id": "state_file", "ok": raw.get("firstLine") == expected["reported"],
-                       "expected": expected["reported"], "actual": raw.get("firstLine", "")})
+        actual = raw.get("firstLine", "")
+        if category_id == "editor" and raw.get("exists") is False and expected["reported"] == "nvim":
+            actual = "nvim"
+        checks.append({"id": "state_file", "ok": actual == expected["reported"],
+                       "expected": expected["reported"], "actual": actual})
     if category_id == "agent":
         checks.append({"id": "mise_where", "ok": choice_state["runnable"] is True,
                        "expected": expected["misePackage"], "actual": choice_state["runnable"]})
@@ -80,7 +123,7 @@ def build_status(ctx: Any) -> Status:
     warnings: list[Warning] = []
     if drift_warning:
         warnings.append(Warning("defaults_catalog_unavailable", drift_warning, recovery="Repair omarchy commands or retry"))
-    pending_handoffs, pending_by_category = _pending(ctx)
+    pending_handoffs, pending_by_category, outcomes = _journal_projection(ctx)
     result_categories = []
     revision_categories = []
     for category_data in catalog:
@@ -103,13 +146,16 @@ def build_status(ctx: Any) -> Status:
             if not raw.get("defaultWebBrowser"):
                 raw_error = raw_error or "xdg-settings returned an empty browser"
         elif category_id == "terminal":
+            resolver_path = ctx.commands.which("xdg-terminal-exec")
             terminal_result = run(ctx, ["xdg-terminal-exec", "--print-id"])
             terminal_value, terminal_error = one_line(terminal_result)
             resolved = terminal_value.split(":", 1)[0]
             file_state = read_state_file(paths["terminal"])
             raw = {**file_state, "resolved": resolved, "fullOutput": terminal_value,
                    "preference": last_preference(paths["terminal"]), "shadowFile": str(paths["terminalShadow"])}
-            if terminal_error and selector_value:
+            if resolver_path is None:
+                raw_error = "xdg-terminal-exec is not on PATH"
+            elif terminal_result["timedOut"] or terminal_error == "malformed_output":
                 raw_error = terminal_error
             if paths["terminalShadow"].is_file():
                 warnings.append(Warning("defaults_terminal_shadowed",
@@ -140,8 +186,10 @@ def build_status(ctx: Any) -> Status:
         result_categories.append({"id": category_id, "label": category_data["label"],
             "summary": category_data["summary"], "selector": category_data["selector"], "stateFile": str(paths[category_id]),
             "state": state, "default": category_data["defaultChoice"], "current": current, "checks": checks,
-            "choices": choices, "pending": pending_by_category.get(category_id), "drifted": category_id in drifted,
-            "probeError": {"command": category_data["selector"], "message": error,
+            "choices": choices, "pending": pending_by_category.get(category_id),
+            "outcome": outcomes.get(category_id) if outcomes.get(category_id, {}).get("state") else None,
+            "drifted": category_id in drifted,
+            "probeError": {"command": "xdg-terminal-exec" if category_id == "terminal" and raw_error else category_data["selector"], "message": error,
                            "recovery": "Repair the named command or file, then retry status"} if error else None})
         revision_categories.append({"id": category_id, "selector": [selector_result["exitCode"], selector_value],
                                     "raw": raw, "stateFileSha256": read_state_file(paths[category_id])["sha256"],

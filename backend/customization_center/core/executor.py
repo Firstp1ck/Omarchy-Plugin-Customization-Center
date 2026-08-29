@@ -409,7 +409,9 @@ class Executor:
             except Exception as error:
                 cc_error = error if isinstance(error, CcError) else CcError("internal_error", str(error))
                 tx = self._save(tx, errors=tx.errors + ({**cc_error.to_json(), "at": self._ctx(module_id, "read").clock.now_iso()},))
-                tx = self._rollback_record(tx, "timeout" if cc_error.code == "confirmation_expired" else "operation")
+                rollback_reason = ("timeout" if cc_error.code == "confirmation_expired" else
+                                   "handoff_failed" if cc_error.code == "handoff_failed" else "operation")
+                tx = self._rollback_record(tx, rollback_reason)
                 cc_error.data = {**cc_error.data, "transactionId": tx.id, "state": tx.state}
                 if tx.state == "rollback_failed":
                     raise CcError("rollback_failed", "One or more operations could not be reversed",

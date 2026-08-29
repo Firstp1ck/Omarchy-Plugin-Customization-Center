@@ -58,7 +58,9 @@ TestCase {
             property int discardCount: 0
             property int pollCount: 0
             property int stopPollCount: 0
+            property int lastPollInterval: 0
             property bool statusPending: false
+            property bool defaultsShape: false
             property var pollCallback: null
             property var lastSaved: null
             function draftLoad(moduleId, callback) {
@@ -74,10 +76,20 @@ TestCase {
                 if (callback) callback({ ok: true, data: {} })
             }
             function status(moduleId, callback) {
-                callback({ ok: true, data: { status: { revision: "revision-1", value: 7 }, pendingHandoffs: statusPending ? [{ id: "handoff-1", sentinelExists: false }] : [] } })
+                var pending = statusPending ? [{ id: "handoff-1", sentinelExists: false }] : []
+                if (defaultsShape) {
+                    var ids = ["browser", "terminal", "editor", "agent"]
+                    var categories = []
+                    for (var i = 0; i < ids.length; ++i)
+                        categories.push({ id: ids[i], label: ids[i], summary: ids[i], selector: "selector", stateFile: "/tmp/state", state: "ready", current: { choice: null, reported: "" }, checks: [], choices: [], pending: i === 0 && statusPending ? { transactionId: "handoff-1", choice: "firefox", startedAt: new Date().toISOString() } : null, outcome: null, drifted: false, default: null })
+                    callback({ ok: true, data: { status: { revision: "revision-1", data: { categories: categories, pendingHandoffs: pending } }, pendingHandoffs: pending } })
+                } else {
+                    callback({ ok: true, data: { status: { revision: "revision-1", value: 7 }, pendingHandoffs: pending } })
+                }
             }
             function pollStatus(moduleId, intervalMs, callback) {
                 pollCount += 1
+                lastPollInterval = intervalMs
                 pollCallback = callback
                 return ({ id: pollCount })
             }
@@ -86,6 +98,9 @@ TestCase {
                     pollCallback({ ok: true, data: { status: { revision: "revision-2", value: 8 }, pendingHandoffs: pending ? [{ id: "handoff-1", sentinelExists: false }] : [] } })
             }
             function stopPolling(handle) { stopPollCount += 1; pollCallback = null }
+            function query(moduleId, name, args, callback) { callback({ ok: true, data: { available: false, count: null } }) }
+            function reconcile(transactionId, callback) { if (callback) callback({ ok: true, data: { state: "pending_handoff" } }) }
+            function abandon(transactionId, callback) { if (callback) callback({ ok: true, data: { state: "rolled_back" } }) }
             function history(callback) { callback({ ok: true, data: { transactions: [] } }) }
             function transaction(transactionId, callback) { callback({ ok: false, data: null }) }
         }
@@ -179,8 +194,24 @@ TestCase {
         registry.modules = [{ id: "hello", title: "Hello", pageUrl: Qt.resolvedUrl("../fixtures/modules/hello/Page.qml"), capabilities: ({}) }]
         verify(registry.select("hello", {}))
         compare(backend.pollCount, 1)
+        compare(backend.lastPollInterval, 2000)
         backend.emitStatusPoll(false)
         compare(backend.stopPollCount, 1)
+    }
+
+    function test_pageOwnedPendingPollingOptsOutOfRegistryFallback() {
+        var backend = createTemporaryObject(fakeBackendComponent, testCase, { statusPending: true, defaultsShape: true })
+        var store = createTemporaryObject(draftStoreComponent, testCase, { backendClient: backend })
+        var registry = createTemporaryObject(registryComponent, testCase, { backendClient: backend, draftStore: store })
+        registry.modules = [{ id: "defaults", title: "Defaults", pageUrl: Qt.resolvedUrl("../../modules/defaults/Page.qml"), capabilities: ({}) }]
+        verify(registry.select("defaults", {}))
+        tryVerify(function() { return registry.pageItem !== null })
+        compare(registry.pageItem.handlesPendingHandoffs, true)
+        compare(backend.pollCount, 0)
+        registry.pageItem.visible = true
+        registry.pageItem.updatePolling()
+        compare(backend.pollCount, 1)
+        compare(backend.lastPollInterval, 5000)
     }
 
     function test_backendParsingQueueingArgvAndTimeouts() {

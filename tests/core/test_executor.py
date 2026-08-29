@@ -473,6 +473,14 @@ def test_handoff_reconcile_and_abandon(isolated_home, stub_command):
                                confirmations=("handoff.0001",))
     assert executor.reconcile(unwrapped.id).state == "committed"
 
+    stub_command("handoff-command", {"exit_code": 7, "stderr": "launcher failed"})
+    with pytest.raises(CcError) as caught:
+        executor.apply("handoff", {"schemaVersion": 1, "wrapped": False}, "stable",
+                       confirmations=("handoff.0001",))
+    assert caught.value.code == "handoff_failed"
+    failed_launch = executor.journal.history(module="handoff", limit=1)[0]
+    assert failed_launch.state == "rolled_back" and failed_launch.reason == "handoff_failed"
+
 
 def test_concurrent_reconcile_wins_over_abandon(isolated_home, stub_command):
     stub_command("omarchy-launch-floating-terminal-with-presentation", {"exit_code": 0})

@@ -107,6 +107,10 @@ Item {
         })
     }
 
+    function pageHandlesPendingHandoffs() {
+        return pageLoader.item && pageLoader.item.handlesPendingHandoffs === true
+    }
+
     function acceptStatus(moduleId, result) {
         if (result && result.ok) {
             var all = Object.assign({}, statusByModule)
@@ -114,7 +118,7 @@ Item {
             statusByModule = all
             updatePageProperties()
             var pending = result.data && result.data.pendingHandoffs ? result.data.pendingHandoffs : []
-            if (moduleId === selectedModuleId && pending.length > 0)
+            if (moduleId === selectedModuleId && pending.length > 0 && !pageHandlesPendingHandoffs())
                 startStatusPolling(moduleId)
             else if (moduleId === selectedModuleId)
                 stopStatusPolling()

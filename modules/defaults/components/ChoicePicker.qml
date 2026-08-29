@@ -23,33 +23,59 @@ FocusScope {
         return result
     }
     function focusFirst() { search.forceActiveFocus() }
+    function focusRow(index) {
+        var row = choiceRows.itemAt(index)
+        if (row) row.forceActiveFocus()
+    }
 
     Column {
         id: pickerColumn
         width: parent.width
-        spacing: Style.spacing.sm
+        spacing: (Style.spacing.sm || Style.space(6))
         Ui.TextField {
             id: search
+            objectName: "choiceSearch"
             width: parent.width
             enabled: root.enabled
             placeholderText: "Search choices"
             Keys.onEscapePressed: text = ""
+            Keys.onDownPressed: root.focusRow(0)
         }
         Repeater {
+            id: choiceRows
             model: root.filteredChoices()
-            delegate: Ui.Button {
+            delegate: Row {
+                id: row
                 required property var modelData
+                required property int index
                 width: pickerColumn.width
-                text: modelData.label + " · " + modelData.state + " · argv: " + root.selector + " " + modelData.id
-                leftAlign: true
-                bordered: true
-                focusable: true
-                selected: root.currentChoice === modelData.id
-                enabled: root.enabled
-                onClicked: root.choicePicked(modelData)
-                onRightClicked: root.detailsChoice = modelData
+                spacing: (Style.spacing.sm || Style.space(6))
+                function forceActiveFocus() { chooseButton.forceActiveFocus() }
+                Ui.Button {
+                    id: chooseButton
+                    objectName: "choiceAction_" + row.modelData.id
+                    width: row.width - detailsButton.width - row.spacing
+                    text: row.modelData.label + " · " + row.modelData.state + " · argv: " + root.selector + " " + row.modelData.id
+                    leftAlign: true
+                    bordered: true
+                    focusable: true
+                    selected: root.currentChoice === row.modelData.id
+                    enabled: root.enabled
+                    onClicked: root.choicePicked(row.modelData)
+                    Keys.onDownPressed: root.focusRow(Math.min(choiceRows.count - 1, row.index + 1))
+                    Keys.onUpPressed: row.index === 0 ? search.forceActiveFocus() : root.focusRow(row.index - 1)
+                }
+                Ui.Button {
+                    id: detailsButton
+                    objectName: "detailsAction_" + row.modelData.id
+                    text: root.detailsChoice && root.detailsChoice.id === row.modelData.id ? "Hide details" : "Details"
+                    bordered: true
+                    focusable: true
+                    enabled: root.enabled
+                    onClicked: root.detailsChoice = root.detailsChoice && root.detailsChoice.id === row.modelData.id ? null : row.modelData
+                }
             }
         }
-        ChoiceDetails { width: parent.width; choice: root.detailsChoice }
+        ChoiceDetails { width: parent.width; choice: root.detailsChoice; selector: root.selector }
     }
 }
