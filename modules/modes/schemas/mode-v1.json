@@ -1,0 +1,18 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+  "required":["version","id","name","members","triggers"],
+  "properties":{
+    "version":{"const":1},"id":{"type":"string","pattern":"^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "name":{"type":"string","minLength":1,"maxLength":80},"description":{"type":"string","maxLength":400},"icon":{"type":"string","maxLength":4},
+    "triggers":{"type":"array","maxItems":0},
+    "members":{"type":"object","minProperties":1,"additionalProperties":false,"properties":{
+      "monitors":{"type":"object","additionalProperties":false,"required":["profileId"],"properties":{"profileId":{"type":"string","pattern":"^[a-z0-9][a-z0-9-]{0,63}$"}}},
+      "themes":{"type":"object","additionalProperties":false,"required":["slug"],"properties":{"slug":{"type":"string"},"preferredWallpaper":{"type":"string"}}},
+      "plugins":{"type":"object","additionalProperties":false,"required":["enabled"],"properties":{"enabled":{"type":"object","minProperties":1,"additionalProperties":{"type":"boolean"}}}},
+      "bar":{"type":"object","minProperties":1,"additionalProperties":false,"properties":{"id":{"type":"string"},"position":{"enum":["top","bottom","left","right"]},"transparent":{"type":"boolean"},"centerAnchor":{"type":"string"},"layout":{"type":"object","additionalProperties":false,"required":["left","center","right"],"properties":{"left":{"$ref":"#/$defs/entries"},"center":{"$ref":"#/$defs/entries"},"right":{"$ref":"#/$defs/entries"}}}}},
+      "keybindings":{"type":"object","additionalProperties":false,"required":["document"],"properties":{"document":{"type":"object"}}},
+      "defaults":{"type":"object","minProperties":1,"additionalProperties":false,"properties":{"browser":{"type":"string"},"terminal":{"type":"string"},"editor":{"type":"string"}}}
+    }}
+  },
+  "$defs":{"entries":{"type":"array","items":{"type":"object","required":["id"],"properties":{"id":{"type":"string","minLength":1}}}}}
+}

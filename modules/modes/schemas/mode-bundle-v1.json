@@ -1,0 +1,9 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+  "required":["bundleVersion","exportedBy","exportedAt","mode","artifacts","externalReferences"],
+  "properties":{
+    "bundleVersion":{"const":1},"exportedBy":{"type":"object"},"exportedAt":{"type":"string"},"mode":{"$ref":"mode-v1.json"},
+    "artifacts":{"type":"array","maxItems":16,"items":{"type":"object","required":["module","kind","id","digest","data"],"properties":{"module":{"const":"monitors"},"kind":{"const":"monitor-profile"},"id":{"type":"string"},"digest":{"type":"string"},"data":{"type":"object"},"machineSpecific":{"type":"boolean"}}}},
+    "externalReferences":{"type":"array","items":{"type":"object"}}
+  }
+}

@@ -274,10 +274,22 @@ class Executor:
         if plan.segments:
             final = VerifyResult("pass", "full", "")
             completed = set(results)
+            by_id = {operation.id: operation for operation in plan.operations}
+            positions = {operation.id: index for index, operation in enumerate(plan.operations)}
+            gate_index = next((index for index, operation in enumerate(plan.operations)
+                               if operation.kind == "TimedConfirmation"), -1)
+            gate_id = plan.operations[gate_index].id if gate_index >= 0 else None
             for segment in plan.segments:
-                required_ids = {operation_id for operation_id in segment.operation_ids
-                                if next((op for op in plan.operations if op.id == operation_id), None) is not None
-                                and next(op for op in plan.operations if op.id == operation_id).kind != "TimedConfirmation"}
+                segment_ids = tuple(operation_id for operation_id in segment.operation_ids if operation_id in by_id)
+                required_ids = {operation_id for operation_id in segment_ids
+                                if by_id[operation_id].kind != "TimedConfirmation"}
+                if partial and gate_index >= 0:
+                    segment_positions = [positions[operation_id] for operation_id in segment_ids]
+                    if gate_id in segment_ids:
+                        required_ids = {operation_id for operation_id in required_ids
+                                        if positions[operation_id] < gate_index}
+                    elif not segment_positions or max(segment_positions) >= gate_index:
+                        continue
                 if partial and not required_ids.issubset(completed):
                     continue
                 module = self.registry.module(segment.module_id)

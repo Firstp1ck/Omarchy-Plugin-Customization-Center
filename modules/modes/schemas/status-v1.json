@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+  "required":["schemaVersion","modes","unreadable","lastApplied","memberRevisions","memberCapabilities"],
+  "properties":{"schemaVersion":{"const":1},"modes":{"type":"array"},"unreadable":{"type":"array"},"lastApplied":{"type":["object","null"]},"memberRevisions":{"type":"object"},"memberCapabilities":{"type":"object"}}
+}

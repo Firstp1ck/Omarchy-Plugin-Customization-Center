@@ -1,0 +1,5 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+  "required":["version","modeId","modeDigest","compositionDigest","targets"],
+  "properties":{"version":{"const":1},"modeId":{"type":"string"},"modeDigest":{"type":"string"},"compositionDigest":{"type":"string"},"targets":{"type":"object"}}
+}

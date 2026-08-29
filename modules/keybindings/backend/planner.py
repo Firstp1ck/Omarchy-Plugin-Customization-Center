@@ -255,9 +255,11 @@ def build_plan(ctx: Any, draft: dict[str, Any], status: Status) -> Plan:
 
 
 def verify(ctx: Any, plan: Plan, status_after: Status, results: dict[str, Any]) -> VerifyResult:
-    if not plan.operations:
+    operations = [item for item in plan.operations if item.module_id == "keybindings"]
+    if not operations:
         return VerifyResult("pass", "full", "")
-    detail = plan.operations[0].detail or {}
+    detail_operation = next((item for item in operations if item.detail), operations[0])
+    detail = detail_operation.detail or {}
     if detail.get("recoveryAction") == "forget":
         model_exists = model_path(ctx).is_file()
         digest = hashlib.sha256(_read_bytes(bindings_path(ctx))).hexdigest()

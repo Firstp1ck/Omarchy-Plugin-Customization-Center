@@ -178,25 +178,26 @@ def test_user_rollback_preserves_concurrent_file_edit(isolated_home, stub_comman
     assert {item["why"] for item in inverse.skipped_inverse_ids} == {"rollback_conflict"}
 
 
-def test_gate_partial_verify_includes_segment_ending_at_gate(isolated_home):
+def test_gate_partial_verify_includes_gate_segment_but_ignores_its_post_gate_ids(isolated_home):
     paths = Paths.from_env(); called = []
     class Module:
-        id = "first"
+        def __init__(self, module_id): self.id = module_id
         def status(self, ctx): return Status(self.id, "r", {}, (), 1)
-        def verify(self, ctx, plan, status, results): called.append(set(results)); return VerifyResult("pass", "full", "")
-    module = Module()
-    registry = SimpleNamespace(view=SimpleNamespace(module=lambda module_id: module,
+        def verify(self, ctx, plan, status, results): called.append((self.id, set(results))); return VerifyResult("pass", "full", "")
+    modules = {module_id: Module(module_id) for module_id in ("first", "second")}
+    registry = SimpleNamespace(view=SimpleNamespace(module=lambda module_id: modules[module_id],
         entry=lambda module_id: SimpleNamespace(metadata={"extraWritablePaths": []})))
     executor = Executor(ROOT, registry, paths, ROOT / "backend/ccctl")
     op = SimpleNamespace(id="first.0001", kind="WriteFileAtomic")
     gate = SimpleNamespace(id="first.0002", kind="TimedConfirmation")
+    post_gate = SimpleNamespace(id="first.0003", kind="WriteFileAtomic")
     second = SimpleNamespace(id="second.0001", kind="RunCommand")
-    plan = SimpleNamespace(segments=(PlanSegment("first", "r", (op.id, gate.id)),
-        PlanSegment("second", "r", (second.id,))), operations=(op, gate, second))
+    plan = SimpleNamespace(segments=(PlanSegment("first", "r", (op.id, gate.id, post_gate.id)),
+        PlanSegment("second", "r", (second.id,))), operations=(op, gate, post_gate, second))
     executor._ctx = lambda *args: SimpleNamespace()
     result = OperationResult(op.id, None, "", "", False, 0, "hash")
     assert executor._verify(plan, {op.id: result}, partial=True).state == "pass"
-    assert called == [{op.id}]
+    assert called == [("first", {op.id})]
 
 
 def test_reconcile_passes_command_log_results(isolated_home):

@@ -1,0 +1,9 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","additionalProperties":false,
+  "required":["schemaVersion","action"],
+  "properties":{
+    "schemaVersion":{"const":1},"action":{"enum":["save","delete","apply","import","export"]},
+    "mode":{"type":["object","null"]},"import":{"type":["object","null"]},"export":{"type":["object","null"]},
+    "expected":{"type":"object","additionalProperties":false,"properties":{"modeDigest":{"type":["string","null"]}}}
+  }
+}

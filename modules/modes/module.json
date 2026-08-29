@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "modes",
+  "title": "Desktop modes",
+  "description": "Review and manually apply sparse combinations of desktop settings",
+  "icon": "󰒓",
+  "navOrder": 80,
+  "page": "Page.qml",
+  "backend": "backend",
+  "draftSchema": "schemas/draft-v1.json",
+  "statusSchema": "schemas/status-v1.json",
+  "coreServices": ["registry", "timed_confirmation", "staging", "drafts"],
+  "queries": ["captureable", "drift", "shortcut"]
+}

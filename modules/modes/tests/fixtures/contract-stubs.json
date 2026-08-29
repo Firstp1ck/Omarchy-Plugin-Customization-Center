@@ -1,0 +1,29 @@
+{
+  "files": {
+    ".config/hypr/bindings.lua": "bindings.lua"
+  },
+  "omarchy-shell": {
+    "exit_code": 0,
+    "stdout": "ok\n",
+    "byArgs": [
+      {"args":["shell","ping"],"stdout":"ok\n"},
+      {"args":["shell","listPlugins"],"stdout":"[{\"id\":\"omarchy.bar\",\"name\":\"Built-in bar\",\"kinds\":[\"bar\"],\"enabled\":true,\"active\":true,\"canDisable\":false,\"firstParty\":true,\"clonedFrom\":\"\"},{\"id\":\"acme.service\",\"name\":\"Acme Service\",\"kinds\":[\"service\"],\"enabled\":false,\"active\":false,\"canDisable\":true,\"firstParty\":false,\"clonedFrom\":\"\"}]\n"},
+      {"args":["shell","listShellConfig"],"stdout":"{\"version\":1,\"plugins\":[],\"disabledPlugins\":[],\"bar\":{\"position\":\"top\",\"transparent\":false,\"layout\":{\"left\":[],\"center\":[],\"right\":[]}}}\n"}
+    ]
+  },
+  "omarchy-plugin-catalog":{"exit_code":0,"stdout":"[]\n"},
+  "omarchy-plugin-validate":{"exit_code":0,"stdout":"ok\n"},
+  "omarchy-launch-floating-terminal-with-presentation":{"exit_code":0,"stdout":""},
+  "hyprctl": {
+    "exit_code":0,"stdout":"",
+    "byArgs":[
+      {"args":["-j","monitors","all"],"stdout":"[{\"id\":0,\"name\":\"eDP-1\",\"description\":\"Laptop Panel\",\"make\":\"Framework\",\"model\":\"Display\",\"serial\":\"PANEL1\",\"width\":2880,\"height\":1800,\"refreshRate\":60.0,\"x\":0,\"y\":0,\"scale\":2.0,\"transform\":0,\"focused\":true,\"dpmsStatus\":true,\"vrr\":false,\"disabled\":false,\"mirrorOf\":\"none\",\"availableModes\":[\"2880x1800@60.00Hz\"]}]\n"},
+      {"args":["binds"],"stdout":""},{"args":["-j","binds"],"stdout":"[]\n"},{"args":["-j","devices"],"stdout":"{}\n"},{"args":["version"],"stdout":"Hyprland 0.56.2\n"},{"args":["-j","getoption","input.resolve_binds_by_sym"],"stdout":"{\"int\":0}\n"},{"args":["-j","configerrors"],"stdout":"[]\n"}
+    ]
+  },
+  "lua":{"exit_code":0,"stdout":""},"luac":{"exit_code":0,"stdout":""},"xkbcli":{"exit_code":1,"stderr":"keymap unavailable\n"},
+  "omarchy-theme-set":{"exit_code":0,"stdout":""},"omarchy-theme-bg-set":{"exit_code":0,"stdout":""},"omarchy-theme-set-templates":{"exit_code":0,"stdout":""},
+  "omarchy-default-browser":{"exit_code":0,"stdout":"chromium\n"},"omarchy-default-terminal":{"exit_code":0,"stdout":"foot\n"},"omarchy-default-editor":{"exit_code":0,"stdout":"nvim\n"},"omarchy-default-agent":{"exit_code":0,"stdout":""},
+  "omarchy":{"exit_code":0,"stdout":"{\"ok\":true,\"commands\":[{\"route\":\"omarchy default browser\",\"args\":\"[chromium|chrome|brave|brave-origin|edge|firefox|zen]\"},{\"route\":\"omarchy default terminal\",\"args\":\"[alacritty|foot|ghostty|kitty]\"},{\"route\":\"omarchy default editor\",\"args\":\"[code|cursor|zed|sublime_text|helix|vim|emacs|nvim]\"},{\"route\":\"omarchy default agent\",\"args\":\"[pi|omp|opencode|ori|claude|codex|grok|agy|copilot|crush]\"}]}"},
+  "xdg-settings":{"exit_code":0,"stdout":"chromium.desktop\n"},"xdg-mime":{"exit_code":0,"stdout":"chromium.desktop\n"},"xdg-terminal-exec":{"exit_code":0,"stdout":"foot.desktop\n"},"mise":{"exit_code":1,"stderr":"not installed\n"},"pacman":{"exit_code":0,"stdout":""}
+}

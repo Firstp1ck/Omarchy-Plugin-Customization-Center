@@ -1,7 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from customization_center.core import Status
+from customization_center.core import Operation, Plan, Status
 
 
 def binding():
@@ -53,3 +53,21 @@ def test_empty_model_removes_managed_block(keybindings_backend,tmp_path):
     draft={"schemaVersion":1,"expectedRevision":"r","model":{"schemaVersion":1,"bindings":[],"disabled":[]}}
     plan=planner.build_plan(ctx,draft,status(old,True))
     assert plan.operations[1].params["body"] is None
+
+
+def test_verify_selects_keybinding_detail_in_composed_plan(keybindings_backend, tmp_path):
+    planner=__import__("cc_modules.keybindings.planner",fromlist=["planner"]); ctx=context(tmp_path)
+    monitor = Operation("monitors.0001", "monitors", "WriteFileAtomic", {}, "Monitor first", (), (), detail={"profileId": "desk"})
+    keybinding = Operation("keybindings.0001", "keybindings", "WriteFileAtomic", {}, "Keybindings", (), (),
+                           detail={"blockState": "absent", "expectedPresent": [], "expectedAbsent": []})
+    plan = Plan("modes", "modes-r", (monitor, keybinding), (), "Composed", (), ())
+    result = planner.verify(ctx, plan, status(), {})
+    assert result.state == "pass"
+
+
+def test_verify_accepts_empty_keybindings_segment_in_composed_plan(keybindings_backend, tmp_path):
+    planner=__import__("cc_modules.keybindings.planner",fromlist=["planner"]); ctx=context(tmp_path)
+    monitor = Operation("monitors.0001", "monitors", "WriteFileAtomic", {}, "Monitor first", (), (), detail={"profileId": "desk"})
+    plan = Plan("modes", "modes-r", (monitor,), (), "Composed", (), ())
+    result = planner.verify(ctx, plan, status(), {})
+    assert result.state == "pass"
