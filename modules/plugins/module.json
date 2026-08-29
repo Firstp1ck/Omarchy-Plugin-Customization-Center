@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "plugins",
+  "title": "Plugins",
+  "description": "Plugin discovery, provenance, enablement, lifecycle, and diagnostics",
+  "icon": "󰏗",
+  "navOrder": 20,
+  "page": "Page.qml",
+  "backend": "backend",
+  "draftSchema": "schemas/draft-v1.json",
+  "statusSchema": "schemas/status-v1.json",
+  "coreServices": ["shell_ipc", "catalog", "settings_schema", "terminal_handoff", "drafts"],
+  "queries": ["validate"]
+}

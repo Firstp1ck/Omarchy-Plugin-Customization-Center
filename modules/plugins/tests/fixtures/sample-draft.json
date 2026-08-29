@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "module": "plugins",
+  "baseRevision": "replaced-by-contract-test",
+  "changes": [
+    {"kind": "enable", "pluginId": "acme.service", "closesCenter": false}
+  ]
+}

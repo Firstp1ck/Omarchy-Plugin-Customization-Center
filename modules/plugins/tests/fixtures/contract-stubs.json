@@ -1,0 +1,14 @@
+{
+  "omarchy-shell": {
+    "exit_code": 0,
+    "stdout": "ok\n",
+    "byArgs": [
+      {"args": ["shell", "ping"], "stdout": "ok\n"},
+      {"args": ["shell", "listPlugins"], "stdout": "[{\"id\":\"acme.service\",\"name\":\"Acme Service\",\"kinds\":[\"service\"],\"enabled\":false,\"active\":false,\"canDisable\":true,\"firstParty\":false,\"clonedFrom\":\"\"}]\n"},
+      {"args": ["shell", "listShellConfig"], "stdout": "{\"version\":1,\"plugins\":[],\"disabledPlugins\":[],\"bar\":{\"layout\":{\"left\":[],\"center\":[],\"right\":[]}}}\n"}
+    ]
+  },
+  "omarchy-plugin-catalog": {"exit_code": 0, "stdout": "[]\n"},
+  "omarchy-plugin-validate": {"exit_code": 0, "stdout": "ok\n"},
+  "omarchy-launch-floating-terminal-with-presentation": {"exit_code": 0, "stdout": ""}
+}

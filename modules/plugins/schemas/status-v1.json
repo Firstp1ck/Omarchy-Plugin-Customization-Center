@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugins-status-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "module", "revision", "rows", "shell", "pendingHandoffs", "diagnostics", "settingsWrite"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "module": {"const": "plugins"},
+    "revision": {"type": "string"},
+    "rows": {"type": "array", "items": {"$ref": "#/$defs/row"}},
+    "shell": {
+      "type": "object",
+      "required": ["available", "configuredBar", "runningBar", "barFallback", "pluginsDir"],
+      "additionalProperties": true,
+      "properties": {
+        "available": {"type": "boolean"},
+        "configuredBar": {"type": ["string", "null"]},
+        "runningBar": {"type": ["string", "null"]},
+        "barFallback": {"type": "boolean"},
+        "pluginsDir": {"type": "string"}
+      }
+    },
+    "pendingHandoffs": {"type": "array", "items": {"type": "object"}},
+    "diagnostics": {"type": "object"},
+    "settingsWrite": {"type": "object", "required": ["available", "reason"]}
+  },
+  "$defs": {
+    "row": {
+      "type": "object",
+      "required": ["id", "name", "kinds", "firstParty", "self", "ownership", "origin", "state", "instances", "settings", "diagnostics", "capabilities"],
+      "additionalProperties": true,
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "description": {"type": ["string", "null"]},
+        "version": {"type": ["string", "null"]},
+        "author": {"type": ["string", "null"]},
+        "license": {"type": ["string", "null"]},
+        "kinds": {"type": "array", "items": {"type": "string"}},
+        "firstParty": {"type": "boolean"},
+        "self": {"type": "boolean"},
+        "ownership": {"enum": ["plugins", "bar"]},
+        "origin": {"type": "object"},
+        "state": {"type": "object"},
+        "instances": {"type": "array"},
+        "settings": {"type": "object"},
+        "diagnostics": {"type": "array"},
+        "capabilities": {"type": "array"}
+      }
+    }
+  }
+}
