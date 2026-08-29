@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "bar",
+  "title": "Bar",
+  "description": "Widget layout, position, transparency, and full-bar selection",
+  "icon": "󰍜",
+  "navOrder": 10,
+  "page": "Page.qml",
+  "backend": "backend",
+  "draftSchema": "schemas/draft-v1.json",
+  "statusSchema": "schemas/status-v1.json",
+  "storedDocuments": [{"kind": "preset", "schema": "schemas/preset-v1.json", "location": "{module_config}/presets/{id}.json"}],
+  "coreServices": ["shell_ipc", "catalog", "settings_schema", "drafts"],
+  "queries": ["catalog"]
+}

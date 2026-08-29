@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "additionalProperties": true,
+  "required": ["schemaVersion", "module", "revision", "shell", "source", "file", "bar", "defaults", "catalog", "barOptions", "capabilities", "rawShellConfig"],
+  "properties": {"schemaVersion": {"const": 1}, "module": {"const": "bar"}, "revision": {"type": "string"},
+    "shell": {"type": "object", "required": ["available", "configuredBarId", "activeBarId", "fallback", "scanning"]},
+    "source": {"type": "object"}, "file": {"type": "object"}, "bar": {"type": "object"}, "defaults": {"type": "object"},
+    "catalog": {"type": "array"}, "barOptions": {"type": "array"}, "capabilities": {"type": "object"}, "rawShellConfig": {"type": "object"}}
+}

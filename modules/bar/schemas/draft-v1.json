@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "required": ["schemaVersion", "module", "baseRevision", "bar"],
+  "properties": {
+    "schemaVersion": {"const": 1}, "module": {"const": "bar"}, "baseRevision": {"type": "string"},
+    "bar": {"$ref": "#/$defs/bar"}
+  },
+  "$defs": {
+    "bar": {"type": "object", "additionalProperties": false, "required": ["id", "position", "transparent", "centerAnchor", "extra", "layout"],
+      "properties": {"id": {"type": ["string", "null"]}, "position": {"enum": ["top", "bottom", "left", "right"]},
+        "transparent": {"type": "boolean"}, "centerAnchor": {"type": "string"}, "extra": {"type": "object"},
+        "layout": {"type": "object", "additionalProperties": false, "required": ["left", "center", "right"],
+          "properties": {"left": {"$ref": "#/$defs/entries"}, "center": {"$ref": "#/$defs/entries"}, "right": {"$ref": "#/$defs/entries"}}}}},
+    "entries": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
+    "entry": {"type": "object", "additionalProperties": false, "required": ["key", "origin", "id", "settings", "form"],
+      "properties": {"key": {"type": "string", "minLength": 1}, "origin": {"oneOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["section", "index"], "properties": {"section": {"enum": ["left", "center", "right"]}, "index": {"type": "integer", "minimum": 0}}}]},
+        "id": {"type": "string", "minLength": 1}, "settings": {"type": "object"}, "form": {"enum": ["object", "string"]}}}
+  }
+}

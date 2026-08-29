@@ -1,0 +1,1 @@
+{"version":1,"idle":{"timeout":300},"plugins":["example.panel"],"bar":{"position":"top","transparent":false,"centerAnchor":"omarchy.clock","futureKey":7,"layout":{"left":[{"id":"omarchy.menu"}],"center":[{"id":"omarchy.clock","format":"HH:mm"}],"right":[{"id":"omarchy.spacer","size":12},{"id":"omarchy.spacer","size":40}]}}}
