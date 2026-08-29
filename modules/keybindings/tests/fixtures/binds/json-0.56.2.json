@@ -1,0 +1,5 @@
+[
+ {"locked":false,"mouse":false,"release":false,"repeat":false,"longPress":false,"non_consuming":false,"auto_consuming":false,"has_description":true,"modmask":64,"keycode":0,"submap":"","key":"SPACE","description":"Open app launcher","dispatcher":"__lua","arg":"6","catch_all":false,"allow_input_capture":false,"submap_universal":"false"},
+ {"locked":true,"mouse":false,"release":false,"repeat":true,"longPress":false,"non_consuming":false,"auto_consuming":false,"has_description":true,"modmask":0,"keycode":0,"submap":"","key":"XF86AudioRaiseVolume","description":"Volume up","dispatcher":"__lua","arg":"9","catch_all":false,"allow_input_capture":false,"submap_universal":"false"},
+ {"locked":false,"mouse":false,"release":false,"repeat":false,"longPress":false,"non_consuming":false,"auto_consuming":false,"has_description":true,"modmask":68,"keycode":0,"submap":"","key":"SUPER + CTRL + code:94","description":"Physical key","dispatcher":"__lua","arg":"10","catch_all":false,"allow_input_capture":false,"submap_universal":"false"}
+]

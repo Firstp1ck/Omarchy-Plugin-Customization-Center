@@ -55,6 +55,8 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider
 
 `tests/qml/test_qml.py` runs `qmllint` over every repository QML file before running `qmltestrunner`.
 
+`BackendClient` wraps all `ccctl` commands used by QML. `capabilities` and `historyFiltered` are 10-second reads; `abandon`, `restore`, `resolve`, and `draftAssetAdd` are globally queued 30-second mutations; `recover` is globally queued with the 15-minute apply timeout ceiling.
+
 ## Documentation
 
 See `docs/architecture.md` for the shared model, `docs/adding-a-module.md` for the module contract, `docs/managed-files.md` for ownership boundaries, and `docs/recovery.md` for terminal recovery procedures.

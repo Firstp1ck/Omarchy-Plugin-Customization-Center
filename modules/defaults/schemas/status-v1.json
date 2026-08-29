@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "defaults-status-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "catalogBaseline", "catalog", "drift", "warnings", "categories", "pendingHandoffs"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "catalogBaseline": {"type": "string"},
+    "catalog": {"type": "array", "items": {"type": "object"}},
+    "drift": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "pendingHandoffs": {"type": "array", "items": {"type": "object", "required": ["id", "sentinelExists"], "properties": {"id": {"type": "string"}, "sentinelExists": {"type": "boolean"}}}},
+    "categories": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "summary", "selector", "stateFile", "state", "default", "current", "checks", "choices", "pending", "drifted", "probeError"],
+        "properties": {
+          "id": {"enum": ["browser", "terminal", "editor", "agent"]},
+          "label": {"type": "string"}, "summary": {"type": "string"}, "selector": {"type": "string"}, "stateFile": {"type": "string"},
+          "state": {"enum": ["ready", "broken", "unknown", "unset", "none_resolvable", "probe_error"]},
+          "default": {"type": ["string", "null"]}, "current": {"type": "object"},
+          "checks": {"type": "array", "items": {"type": "object"}},
+          "choices": {"type": "array", "items": {"type": "object"}},
+          "pending": {"type": ["object", "null"]}, "drifted": {"type": "boolean"}, "probeError": {"type": ["object", "null"]}
+        }
+      }
+    }
+  }
+}

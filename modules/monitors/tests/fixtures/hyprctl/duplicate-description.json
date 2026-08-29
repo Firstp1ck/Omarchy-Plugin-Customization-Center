@@ -1,0 +1,4 @@
+[
+  {"name":"DP-1","description":"Same Panel SAME","make":"Acme","model":"Panel","serial":"SAME","width":2560,"height":1440,"refreshRate":143.972,"x":0,"y":0,"scale":1.0,"transform":0,"disabled":false,"focused":true,"dpmsStatus":true,"mirrorOf":"none","availableModes":["2560x1440@143.972Hz"]},
+  {"name":"DP-2","description":"Same Panel SAME","make":"Acme","model":"Panel","serial":"SAME","width":2560,"height":1440,"refreshRate":143.972,"x":2560,"y":0,"scale":1.0,"transform":0,"disabled":false,"focused":false,"dpmsStatus":true,"mirrorOf":"none","availableModes":["2560x1440@143.972Hz"]}
+]

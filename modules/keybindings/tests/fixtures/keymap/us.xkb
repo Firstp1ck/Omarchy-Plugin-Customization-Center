@@ -1,0 +1,2 @@
+xkb_keycodes "evdev" { <AE01> = 10; <TAB> = 23; };
+xkb_symbols "basic" { key <AE01> { [ 1, exclam ] }; key <TAB> { [ Tab, ISO_Left_Tab ] }; };

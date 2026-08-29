@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    {
+      "id": "b51ebad9-3854-4fd6-8904-d2986d9bd24c",
+      "enabled": true,
+      "chord": {
+        "sourceKeys": "SUPER + SHIFT + R",
+        "modifiers": [
+          "SUPER",
+          "SHIFT"
+        ],
+        "key": {
+          "kind": "keysym",
+          "value": "r"
+        }
+      },
+      "description": "Café terminal",
+      "action": {
+        "type": "exec",
+        "command": "printf 'é'",
+        "catalogId": null
+      },
+      "flags": {
+        "locked": true,
+        "release": false,
+        "repeating": true,
+        "nonConsuming": false,
+        "autoConsuming": false,
+        "bypass": false
+      }
+    }
+  ],
+  "disabled": [
+    {
+      "id": "2f3b6d7c-0f4e-4a4d-9d1a-6f0a4d8f3c21",
+      "sourceKeys": "SUPER + SPACE",
+      "target": {
+        "kind": "omarchy_default",
+        "module": "utilities",
+        "description": "Omarchy menu",
+        "identity": "64:keysym:space"
+      },
+      "reason": "replaced",
+      "replacedBy": "b51ebad9-3854-4fd6-8904-d2986d9bd24c"
+    }
+  ]
+}

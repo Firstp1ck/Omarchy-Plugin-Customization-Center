@@ -1,0 +1,4 @@
+[Desktop Entry]
+Name=Zen Browser
+Exec=zen-browser %U
+Type=Application

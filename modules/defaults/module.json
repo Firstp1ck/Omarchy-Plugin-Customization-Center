@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "defaults",
+  "title": "Default applications",
+  "description": "Inspect, install, and set Omarchy default applications",
+  "icon": "󰒓",
+  "navOrder": 40,
+  "page": "Page.qml",
+  "backend": "backend",
+  "draftSchema": "schemas/draft-v1.json",
+  "statusSchema": "schemas/status-v1.json",
+  "extraWritablePaths": [
+    "{xdg_config_home}/mimeapps.list",
+    "{xdg_config_home}/xdg-terminals.list",
+    "{home}/.local/state/omarchy/defaults/editor",
+    "{xdg_config_home}/omarchy/defaults/agent",
+    "{xdg_config_home}/mise/config.toml"
+  ],
+  "coreServices": ["hyprctl", "terminal_handoff"],
+  "queries": ["terminal_windows"]
+}

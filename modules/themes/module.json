@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "themes",
+  "title": "Theme composer",
+  "description": "Compose, preview, save, and activate data-only Omarchy themes",
+  "icon": "󰏘",
+  "navOrder": 60,
+  "page": "Page.qml",
+  "backend": "backend",
+  "draftSchema": "schemas/draft-v1.json",
+  "statusSchema": "schemas/status-v1.json",
+  "storedDocuments": [
+    {"kind": "sidecar", "schema": "schemas/sidecar-v1.json", "location": "{module_state}/<slug>.json"}
+  ],
+  "coreServices": ["shell_ipc", "staging"],
+  "queries": ["preview"]
+}

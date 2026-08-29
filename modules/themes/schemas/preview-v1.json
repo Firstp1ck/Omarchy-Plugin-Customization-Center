@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "colorsToml", "shellToml", "colorsB64", "shellB64", "tokens"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1}, "colorsToml": {"type": "string"}, "shellToml": {"type": "string"},
+    "colorsB64": {"type": "string"}, "shellB64": {"type": "string"}, "tokens": {"type": "object"}
+  }
+}

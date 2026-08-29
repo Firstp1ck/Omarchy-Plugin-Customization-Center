@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "monitors",
+  "title": "Monitors",
+  "description": "Save and safely activate named monitor layouts",
+  "icon": "󰍹",
+  "navOrder": 50,
+  "page": "Page.qml",
+  "backend": "backend",
+  "draftSchema": "schemas/monitors-draft-v1.json",
+  "statusSchema": "schemas/status-v1.json",
+  "storedDocuments": [
+    {"kind": "profile", "schema": "schemas/profile-v1.json", "location": "{module_config}/monitor-profiles/<id>.json"},
+    {"kind": "active", "schema": "schemas/active-v1.json", "location": "{module_state}/active.json"}
+  ],
+  "coreServices": ["hyprctl", "managed_block", "lua", "timed_confirmation"],
+  "queries": ["layout-preview"]
+}

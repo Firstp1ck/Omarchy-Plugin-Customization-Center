@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from customization_center.core import BackupStore, CcError, CommandRunner, Hyprctl, Operation, ShellIpc, ops
+from customization_center.core import BackupStore, CcError, CommandRunner, Hyprctl, ShellIpc, ops
 from customization_center.core.paths import Paths
 
 
@@ -68,16 +68,25 @@ def test_ensure_directory_forward_inverse_created_and_existing(isolated_home):
 def test_every_builder_produces_frozen_operations(isolated_home):
     paths = Paths.from_env(); ctx = _ctx(paths); target = paths.module_config("sample") / "x"
     staged = paths.staging_dir("sample", "plan")
+    backup_paths = (str(target),); detail = {"preview": "value"}; timeout_s = 12.0
     operations = [
-        ops.WriteFileAtomic(ctx, target, "x", "0600"),
-        ops.ReplaceManagedBlock(ctx, target.with_suffix(".lua"), "TEST", 1, "x"),
-        ops.EnsureDirectory(ctx, target.parent), ops.ReplaceDirectoryAtomic(ctx, target, staged),
-        ops.RunCommand(ctx, ["true"], 1, "run", inverse=["true"]), ops.RestoreBackup(ctx, target),
-        ops.RemoveFile(ctx, target), ops.ShellIpc(ctx, "ping"), ops.HyprctlReload(ctx),
-        ops.TimedConfirmation(ctx, 1), ops.TerminalHandoff(ctx, ["true"], "title"),
+        ops.WriteFileAtomic(ctx, target, "x", "0600", backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.ReplaceManagedBlock(ctx, target.with_suffix(".lua"), "TEST", 1, "x", backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.EnsureDirectory(ctx, target.parent, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.ReplaceDirectoryAtomic(ctx, target, staged, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.RunCommand(ctx, ["true"], timeout_s, "run", inverse=["true"], backup_paths=backup_paths, detail=detail),
+        ops.RestoreBackup(ctx, target, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.RemoveFile(ctx, target, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.ShellIpc(ctx, "ping", backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.HyprctlReload(ctx, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.TimedConfirmation(ctx, 1, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.TerminalHandoff(ctx, ["true"], "title", backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
     ]
     assert {item.kind for item in operations} == set(ops._KINDS)
     for operation in operations:
+        assert operation.backup_paths == backup_paths
+        assert operation.timeout_s == timeout_s
+        assert operation.detail == detail
         ops.validate_operation(operation, paths)
         with pytest.raises(Exception):
             operation.kind = "changed"
@@ -122,9 +131,7 @@ def test_staging_and_backup_paths_are_validated(isolated_home, tmp_path):
     with pytest.raises(CcError) as caught:
         ops.validate_operation(outside_stage, paths)
     assert caught.value.code == "permission_required"
-    operation = Operation("sample.9999", "sample", "ShellIpc",
-        {"method": "ping", "args": [], "expect": ["ok"], "expect_json": False},
-        "unsafe backup", (), ("/etc/passwd",), 5)
+    operation = ops.ShellIpc(ctx, "ping", backup_paths=("/etc/passwd",))
     with pytest.raises(CcError) as caught:
         ops.validate_operation(operation, paths)
     assert caught.value.code == "permission_required"

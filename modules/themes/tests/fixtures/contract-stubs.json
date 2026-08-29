@@ -1,0 +1,14 @@
+{
+  "omarchy-theme-set": {"exit_code": 0, "stdout": "", "stderr": ""},
+  "omarchy-theme-bg-set": {"exit_code": 0, "stdout": "", "stderr": ""},
+  "omarchy-theme-set-templates": {"exit_code": 0, "stdout": "", "stderr": ""},
+  "omarchy-shell": {
+    "exit_code": 0,
+    "stdout": "ok\n",
+    "stderr": "",
+    "byArgs": [
+      {"args": ["shell", "ping"], "stdout": "ok\n"},
+      {"args": ["shell", "applyTheme"], "stdout": "ok\n"}
+    ]
+  }
+}

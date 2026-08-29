@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Monitor profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "outputs",
+    "match",
+    "extraOutputs",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 500,
+      "default": ""
+    },
+    "outputs": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/output"
+      }
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "allowExtra"
+      ],
+      "properties": {
+        "required": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowExtra": {
+          "type": "boolean"
+        }
+      }
+    },
+    "extraOutputs": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "updatedAt": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "make",
+        "model",
+        "serial",
+        "connector"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "make": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "serial": {
+          "type": "string"
+        },
+        "connector": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+$"
+        }
+      }
+    },
+    "mode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "refreshMilliHz"
+      ],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "refreshMilliHz": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "identity",
+        "connectorPolicy",
+        "enabled",
+        "mode",
+        "position",
+        "scale120",
+        "transform",
+        "mirrorOf",
+        "bitDepth",
+        "vrr",
+        "whenMissing"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "connectorPolicy": {
+          "enum": [
+            "never",
+            "if-no-fingerprint",
+            "confirm"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "$ref": "#/$defs/mode"
+        },
+        "position": {
+          "$ref": "#/$defs/position"
+        },
+        "scale120": {
+          "type": "integer",
+          "minimum": 30,
+          "maximum": 960
+        },
+        "transform": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7
+        },
+        "mirrorOf": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bitDepth": {
+          "enum": [
+            null,
+            8,
+            10
+          ]
+        },
+        "vrr": {
+          "enum": [
+            null,
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "whenMissing": {
+          "enum": [
+            "block",
+            "skip"
+          ]
+        }
+      }
+    },
+    "extra": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "position",
+        "scale"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "preferred",
+            "highres",
+            "highrr",
+            "maxwidth"
+          ]
+        },
+        "position": {
+          "enum": [
+            "auto",
+            "auto-right",
+            "auto-left",
+            "auto-up",
+            "auto-down"
+          ]
+        },
+        "scale": {
+          "oneOf": [
+            {
+              "const": "auto"
+            },
+            {
+              "type": "integer",
+              "minimum": 30,
+              "maximum": 960
+            }
+          ]
+        }
+      }
+    }
+  }
+}

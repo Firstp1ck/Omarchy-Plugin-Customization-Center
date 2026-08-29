@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "active", "themes", "builtInSlugs", "machineOverride", "userTemplates", "wallpaperSources", "iconThemes", "openPreviewTransaction"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "active": {
+      "type": "object", "additionalProperties": false,
+      "required": ["slug", "source", "background", "hasColors", "hasShell"],
+      "properties": {
+        "slug": {"type": ["string", "null"]}, "source": {"type": ["string", "null"]},
+        "background": {"type": ["string", "null"]}, "hasColors": {"type": "boolean"}, "hasShell": {"type": "boolean"}
+      }
+    },
+    "themes": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["slug", "source", "path", "hasPreviewImage", "wallpapers", "unsupportedFiles"],
+        "additionalProperties": true,
+        "properties": {
+          "slug": {"type": "string"}, "source": {"enum": ["builtin", "user"]}, "path": {"type": "string"},
+          "hasPreviewImage": {"type": "boolean"}, "wallpapers": {"type": "integer", "minimum": 0},
+          "unsupportedFiles": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "builtInSlugs": {"type": "array", "items": {"type": "string"}},
+    "machineOverride": {
+      "type": "object", "required": ["present", "path", "values"], "additionalProperties": false,
+      "properties": {"present": {"type": "boolean"}, "path": {"type": "string"}, "values": {"type": "object"}}
+    },
+    "userTemplates": {"type": "array", "items": {"type": "string"}},
+    "wallpaperSources": {"type": "array"}, "iconThemes": {"type": "array", "items": {"type": "string"}},
+    "openPreviewTransaction": {"type": ["object", "null"]}
+  }
+}

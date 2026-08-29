@@ -1,0 +1,9 @@
+bind
+	modmask: 64
+	submap:
+	key:
+	keycode: 49
+	catchall: false
+	description: Toggle scratchpad
+	dispatcher: exec
+	arg: true

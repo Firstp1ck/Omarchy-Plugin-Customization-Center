@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "slug", "transactionId", "savedAt", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1}, "slug": {"type": "string"}, "transactionId": {"type": "string"},
+    "savedAt": {"type": "string"},
+    "files": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+  }
+}

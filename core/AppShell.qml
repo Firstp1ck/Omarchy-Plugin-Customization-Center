@@ -90,6 +90,113 @@ Item {
                     if (root.moduleRegistry && root.moduleRegistry.errorMessage) return root.moduleRegistry.errorMessage
                     return applyBar.errorMessage
                 }
+                onRecoveryRequested: function(action) {
+                    if (action === "Open recovery" && root.transactionModel)
+                        root.transactionModel.recover()
+                }
+            }
+
+            Ui.BorderSurface {
+                id: recoveryPanel
+                Layout.fillWidth: true
+                visible: root.transactionModel && root.transactionModel.pinnedRecovery
+                color: Style.normalFillFor(Color.urgent, Color.accent)
+                radius: Style.cornerRadius
+                borderSpec: Border.controlSpec("focus", Color.urgent, Color.accent)
+                implicitHeight: recoveryContent.implicitHeight + Style.spacing.rowPaddingX * 2
+                readonly property var transaction: root.transactionModel ? root.transactionModel.pinnedRecovery : null
+                readonly property var backupPaths: root.transactionModel ? root.transactionModel.backupPaths(transaction) : []
+                readonly property var manualPaths: root.transactionModel ? root.transactionModel.manualPaths(transaction) : []
+                readonly property var rollbackErrors: root.transactionModel ? root.transactionModel.rollbackErrors(transaction) : []
+                readonly property var resolveOperations: root.transactionModel ? root.transactionModel.resolveOperations(transaction) : []
+
+                ColumnLayout {
+                    id: recoveryContent
+                    anchors.fill: parent
+                    anchors.margins: Style.spacing.rowPaddingX
+                    spacing: Style.spacing.sm
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Recovery required"
+                        color: Color.urgent
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.subtitle
+                        font.bold: true
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Transaction " + (recoveryPanel.transaction ? recoveryPanel.transaction.id : "") + " has unresolved rollback errors. Restore each backed path, then acknowledge manual recovery steps."
+                        color: Color.foreground
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.bodySmall
+                        wrapMode: Text.WordWrap
+                    }
+                    Repeater {
+                        model: recoveryPanel.backupPaths
+                        delegate: RowLayout {
+                            required property string modelData
+                            Layout.fillWidth: true
+                            Text {
+                                Layout.fillWidth: true
+                                text: "Backup: " + modelData
+                                color: Color.foreground
+                                font.family: Style.font.family
+                                font.pixelSize: Style.font.bodySmall
+                                elide: Text.ElideMiddle
+                            }
+                            Ui.Button {
+                                text: "Restore"
+                                bordered: true
+                                focusable: true
+                                enabled: root.transactionModel && !root.transactionModel.recoveryBusy
+                                onClicked: root.transactionModel.restore(modelData)
+                            }
+                        }
+                    }
+                    Repeater {
+                        model: recoveryPanel.manualPaths
+                        delegate: Text {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            text: "Manual recovery: " + (modelData.path || modelData)
+                            color: Color.foreground
+                            font.family: Style.font.family
+                            font.pixelSize: Style.font.bodySmall
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    Repeater {
+                        model: recoveryPanel.rollbackErrors
+                        delegate: Text {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            text: "Rollback error: " + (modelData.message || modelData.code || modelData.operationId || modelData.operation_id || "Unknown error")
+                            color: Color.urgent
+                            font.family: Style.font.family
+                            font.pixelSize: Style.font.bodySmall
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                    Repeater {
+                        model: recoveryPanel.resolveOperations
+                        delegate: Ui.Button {
+                            required property string modelData
+                            text: "Acknowledge " + modelData
+                            bordered: true
+                            focusable: true
+                            enabled: root.transactionModel && !root.transactionModel.recoveryBusy
+                            onClicked: root.transactionModel.resolve(modelData)
+                        }
+                    }
+                    Ui.Button {
+                        text: recoveryPanel.transaction && root.transactionModel && root.transactionModel.recoveryBusy ? "Recovering…" : "Run recovery scan"
+                        bordered: true
+                        focusable: true
+                        enabled: root.transactionModel && !root.transactionModel.recoveryBusy
+                        onClicked: root.transactionModel.recover()
+                    }
+                }
             }
 
             RowLayout {

@@ -41,7 +41,7 @@ QtObject {
     }
 
     function isRead(command) {
-        return ["modules", "capabilities", "status", "validate", "plan", "query", "history", "transaction"].indexOf(command) >= 0
+        return logic.isRead(command)
     }
 
     function call(command, argv, moduleId, stdinText, callback, options) {
@@ -164,7 +164,13 @@ QtObject {
             if (callback) callback(result)
         })
     }
-    function history(callback) { return call("history", ["history", "--limit", "50"], "", "", callback) }
+    function history(callback) { return call("history", logic.buildHistoryFilteredArgv("", 50, ""), "", "", callback) }
+    function historyFiltered(moduleId, limit, state, callback) {
+        return call("history", logic.buildHistoryFilteredArgv(moduleId, limit, state), moduleId, "", callback)
+    }
+    function capabilities(moduleId, callback) {
+        return call("capabilities", logic.buildCapabilitiesArgv(moduleId), moduleId, "", callback)
+    }
     function validate(moduleId, draft, callback) { return call("validate", ["validate", moduleId, "--draft", "-"], moduleId, JSON.stringify(draft || {}), callback) }
     function plan(moduleId, draft, callback) { return call("plan", ["plan", moduleId, "--draft", "-"], moduleId, JSON.stringify(draft || {}), callback) }
     function query(moduleId, name, args, callback) { return call("query", ["query", moduleId, name, "--args", "-"], moduleId, JSON.stringify(args || {}), callback) }
@@ -194,9 +200,14 @@ QtObject {
     }
     function transaction(transactionId, callback) { return call("transaction", ["transaction", transactionId], "", "", callback) }
     function reconcile(transactionId, callback) { return call("reconcile", ["reconcile", transactionId], "", "", function(result) { pendingHandoffReconciled(transactionId, result); if (callback) callback(result) }) }
+    function abandon(transactionId, callback) { return call("abandon", logic.buildAbandonArgv(transactionId), "", "", callback) }
+    function recover(callback) { return call("recover", logic.buildRecoverArgv(), "", "", callback) }
+    function restore(transactionId, path, callback) { return call("restore", logic.buildRestoreArgv(transactionId, path), "", "", callback) }
+    function resolve(transactionId, operationId, callback) { return call("resolve", logic.buildResolveArgv(transactionId, operationId), "", "", callback) }
     function draftLoad(moduleId, callback) { return call("draft-load", ["draft", "load", moduleId], moduleId, "", callback) }
     function draftSave(moduleId, draft, callback) { return call("draft-save", ["draft", "save", moduleId, "--draft", "-"], moduleId, JSON.stringify(draft || {}), callback) }
     function draftDiscard(moduleId, callback) { return call("draft-discard", ["draft", "discard", moduleId], moduleId, "", callback) }
+    function draftAssetAdd(moduleId, path, callback) { return call("draft-asset-add", logic.buildDraftAssetAddArgv(moduleId, path), moduleId, "", callback) }
 
     function pollTransaction(transactionId, intervalMs, callback) {
         return _newPoller("transaction", transactionId, intervalMs, callback)

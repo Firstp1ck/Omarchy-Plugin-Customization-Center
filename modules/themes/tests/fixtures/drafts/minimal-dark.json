@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "kind": "compose",
+  "slug": "minimal-dark",
+  "displayName": "Minimal Dark",
+  "origin": {
+    "type": "minimal",
+    "slug": "dark",
+    "revision": "seed:dark"
+  },
+  "palette": {
+    "mode": "dark",
+    "accent": "#7aa2f7",
+    "background": "#101218",
+    "foreground": "#e6e8ef",
+    "red": "#f7768e",
+    "yellow": "#e0af68",
+    "green": "#9ece6a",
+    "cyan": "#449dab",
+    "blue": "#7aa2f7",
+    "magenta": "#ad8ee6"
+  },
+  "sections": {
+    "bar": null,
+    "controls": null,
+    "spacing": null,
+    "font": null,
+    "popups": null,
+    "tooltip": null,
+    "notifications": null,
+    "launcher": null,
+    "menu": null,
+    "polkit": null,
+    "lock": null,
+    "image-picker": null
+  },
+  "wallpapers": [],
+  "preferredWallpaper": null,
+  "iconTheme": null,
+  "acceptedWarnings": []
+}

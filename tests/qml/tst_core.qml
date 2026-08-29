@@ -217,6 +217,30 @@ TestCase {
         compare(backend.timeoutFor("apply", plan), 52000)
         compare(backend.timeoutFor("rollback", plan), 52000)
 
+        compare(JSON.stringify(backend.buildAbandonArgv("tx-1")), JSON.stringify(["abandon", "tx-1"]))
+        compare(JSON.stringify(backend.buildRecoverArgv()), JSON.stringify(["recover"]))
+        compare(JSON.stringify(backend.buildRestoreArgv("tx-1", "/tmp/backup")), JSON.stringify(["restore", "tx-1", "--path", "/tmp/backup"]))
+        compare(JSON.stringify(backend.buildResolveArgv("tx-1", "operation-2")), JSON.stringify(["resolve", "tx-1", "--operation", "operation-2"]))
+        compare(JSON.stringify(backend.buildCapabilitiesArgv("")), JSON.stringify(["capabilities"]))
+        compare(JSON.stringify(backend.buildCapabilitiesArgv("hello")), JSON.stringify(["capabilities", "hello"]))
+        compare(JSON.stringify(backend.buildHistoryFilteredArgv("hello", 12, "rollback_failed")), JSON.stringify(["history", "--module", "hello", "--limit", "12", "--state", "rollback_failed"]))
+        compare(JSON.stringify(backend.buildDraftAssetAddArgv("hello", "/tmp/asset.txt")), JSON.stringify(["draft", "asset-add", "hello", "--path", "/tmp/asset.txt"]))
+
+        verify(backend.isRead("capabilities"))
+        verify(backend.isRead("history"))
+        verify(!backend.isRead("abandon"))
+        verify(!backend.isRead("recover"))
+        verify(!backend.isRead("restore"))
+        verify(!backend.isRead("resolve"))
+        verify(!backend.isRead("draft-asset-add"))
+        compare(backend.timeoutFor("capabilities"), 10000)
+        compare(backend.timeoutFor("history"), 10000)
+        compare(backend.timeoutFor("abandon"), 30000)
+        compare(backend.timeoutFor("restore"), 30000)
+        compare(backend.timeoutFor("resolve"), 30000)
+        compare(backend.timeoutFor("draft-asset-add"), 30000)
+        compare(backend.timeoutFor("recover"), 15 * 60 * 1000)
+
         var retryLookup = createTemporaryObject(fakeRollbackLookupComponent, testCase, { results: [
             { ok: false, errors: [{ code: "superseded", message: "replaced" }] },
             { ok: true, data: { transaction: { plan: plan } } }

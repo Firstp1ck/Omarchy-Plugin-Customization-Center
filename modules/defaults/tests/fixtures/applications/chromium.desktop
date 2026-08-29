@@ -1,0 +1,4 @@
+[Desktop Entry]
+Name=Chromium
+Exec=chromium %U
+Type=Application

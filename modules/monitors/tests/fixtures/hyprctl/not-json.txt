@@ -1,0 +1,1 @@
+Couldn't connect to /run/user/1000/hypr/socket.sock

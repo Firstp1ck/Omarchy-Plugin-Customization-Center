@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "action": "save-profile",
+  "profile": {
+    "schemaVersion": 1,
+    "id": "laptop",
+    "name": "Laptop only",
+    "description": "Built-in panel",
+    "outputs": [
+      {
+        "id": "laptop",
+        "label": "Laptop display",
+        "identity": {"description": "Laptop Panel", "make": "Framework", "model": "Display", "serial": "PANEL1", "connector": "eDP-1"},
+        "connectorPolicy": "confirm",
+        "enabled": true,
+        "mode": {"width": 2880, "height": 1800, "refreshMilliHz": 60000},
+        "position": {"x": 0, "y": 0},
+        "scale120": 240,
+        "transform": 0,
+        "mirrorOf": null,
+        "bitDepth": null,
+        "vrr": null,
+        "whenMissing": "block"
+      }
+    ],
+    "match": {"required": ["laptop"], "allowExtra": false},
+    "extraOutputs": null,
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  },
+  "assignments": {},
+  "acknowledgedWarnings": []
+}

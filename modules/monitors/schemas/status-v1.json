@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Monitors status v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "inventory",
+    "profiles",
+    "active",
+    "loader",
+    "handwritten",
+    "toggles",
+    "related",
+    "capabilities"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "inventory": {
+      "type": "object"
+    },
+    "profiles": {
+      "type": "array"
+    },
+    "active": {
+      "type": "object"
+    },
+    "loader": {
+      "type": "object"
+    },
+    "handwritten": {
+      "type": "object"
+    },
+    "toggles": {
+      "type": "object"
+    },
+    "related": {
+      "type": "object"
+    },
+    "capabilities": {
+      "type": "object"
+    }
+  }
+}

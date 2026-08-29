@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "commands": [
+    {"route":"omarchy default browser","args":"[chromium|chrome|brave|brave-origin|edge|firefox|zen]"},
+    {"route":"omarchy default terminal","args":"[alacritty|foot|ghostty|kitty]"},
+    {"route":"omarchy default editor","args":"[code|cursor|zed|sublime_text|helix|vim|emacs|nvim]"},
+    {"route":"omarchy default agent","args":"[pi|omp|opencode|ori|claude|codex|grok|agy|copilot|crush]"}
+  ]
+}

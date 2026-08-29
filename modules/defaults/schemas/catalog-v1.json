@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "defaults-catalog-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "categories"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "categories": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "summary", "selector", "route", "stateSource", "stateFile", "emptyOutputMeans", "defaultChoice", "installedPredicate", "setLaunches", "setTimeoutS", "choices"],
+        "properties": {
+          "id": {"enum": ["browser", "terminal", "editor", "agent"]}, "label": {"type": "string"}, "summary": {"type": "string"},
+          "selector": {"type": "string"}, "route": {"type": "string"}, "stateSource": {"type": "object"},
+          "stateFile": {"type": "string"}, "emptyOutputMeans": {"type": ["string", "null"]}, "defaultChoice": {"type": ["string", "null"]},
+          "installedPredicate": {"enum": ["path", "mise"]}, "setLaunches": {"type": "boolean"}, "setTimeoutS": {"type": "integer"},
+          "choices": {"type": "array", "minItems": 1, "items": {"type": "object"}}
+        }
+      }
+    }
+  }
+}

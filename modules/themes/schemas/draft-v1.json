@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "slug"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "kind": {"enum": ["compose", "activate"]},
+    "slug": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$", "maxLength": 64},
+    "displayName": {"type": "string", "minLength": 1, "maxLength": 64},
+    "origin": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["type", "slug", "revision"],
+      "properties": {
+        "type": {"enum": ["active", "builtin", "user", "minimal"]},
+        "slug": {"type": "string"},
+        "revision": {"type": "string"}
+      }
+    },
+    "palette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "background", "foreground", "accent", "red", "yellow", "green", "cyan", "blue", "magenta"],
+      "properties": {
+        "mode": {"enum": ["dark", "light"]},
+        "accent": {"type": "string"}, "selection": {"type": "string"}, "muted": {"type": "string"},
+        "background": {"type": "string"}, "dark_background": {"type": "string"}, "darker_background": {"type": "string"}, "lighter_background": {"type": "string"},
+        "foreground": {"type": "string"}, "dark_foreground": {"type": "string"}, "light_foreground": {"type": "string"}, "bright_foreground": {"type": "string"},
+        "red": {"type": "string"}, "yellow": {"type": "string"}, "orange": {"type": "string"}, "green": {"type": "string"}, "cyan": {"type": "string"}, "blue": {"type": "string"}, "magenta": {"type": "string"}, "brown": {"type": "string"},
+        "bright_red": {"type": "string"}, "bright_yellow": {"type": "string"}, "bright_green": {"type": "string"}, "bright_cyan": {"type": "string"}, "bright_blue": {"type": "string"}, "bright_magenta": {"type": "string"},
+        "hyprland_active_border": {"type": ["string", "null"]}, "hyprland_inactive_border": {"type": ["string", "null"]}
+      }
+    },
+    "sections": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bar": {"type": ["object", "null"]}, "controls": {"type": ["object", "null"]}, "spacing": {"type": ["object", "null"]},
+        "font": {"type": ["object", "null"]}, "popups": {"type": ["object", "null"]}, "tooltip": {"type": ["object", "null"]},
+        "notifications": {"type": ["object", "null"]}, "launcher": {"type": ["object", "null"]}, "menu": {"type": ["object", "null"]},
+        "polkit": {"type": ["object", "null"]}, "lock": {"type": ["object", "null"]}, "image-picker": {"type": ["object", "null"]}
+      }
+    },
+    "wallpapers": {
+      "type": "array", "maxItems": 12,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["sourcePath", "outputName"],
+        "properties": {"sourcePath": {"type": "string"}, "outputName": {"type": "string"}}
+      }
+    },
+    "preferredWallpaper": {"type": ["string", "null"]},
+    "iconTheme": {"type": ["string", "null"]},
+    "acceptedWarnings": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "activate": {"type": "boolean"},
+    "delete": {"type": "boolean"},
+    "tryInShell": {"type": "boolean"}
+  }
+}

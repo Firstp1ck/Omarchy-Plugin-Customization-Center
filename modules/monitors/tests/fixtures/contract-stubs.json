@@ -1,0 +1,35 @@
+{
+  "hyprctl": {
+    "exit_code": 0,
+    "stdout": "[\n  {\n    \"id\": 0, \"name\": \"eDP-1\", \"description\": \"Laptop Panel\", \"make\": \"Framework\", \"model\": \"Display\", \"serial\": \"PANEL1\",\n    \"width\": 2880, \"height\": 1800, \"refreshRate\": 60.0, \"x\": 0, \"y\": 0, \"scale\": 2.0, \"transform\": 0,\n    \"focused\": true, \"dpmsStatus\": true, \"vrr\": false, \"disabled\": false, \"mirrorOf\": \"none\",\n    \"availableModes\": [\"2880x1800@60.00Hz\", \"2880x1800@60.00Hz\", \"1920x1200@60.00Hz\"]\n  }\n]\n",
+    "stderr": "",
+    "byArgs": [
+      {
+        "args": [
+          "-j",
+          "monitors",
+          "all"
+        ],
+        "stdout": "[\n  {\n    \"id\": 0, \"name\": \"eDP-1\", \"description\": \"Laptop Panel\", \"make\": \"Framework\", \"model\": \"Display\", \"serial\": \"PANEL1\",\n    \"width\": 2880, \"height\": 1800, \"refreshRate\": 60.0, \"x\": 0, \"y\": 0, \"scale\": 2.0, \"transform\": 0,\n    \"focused\": true, \"dpmsStatus\": true, \"vrr\": false, \"disabled\": false, \"mirrorOf\": \"none\",\n    \"availableModes\": [\"2880x1800@60.00Hz\", \"2880x1800@60.00Hz\", \"1920x1200@60.00Hz\"]\n  }\n]\n"
+      },
+      {
+        "args": [
+          "-j",
+          "configerrors"
+        ],
+        "stdout": "[]\n"
+      },
+      {
+        "args": [
+          "reload"
+        ],
+        "stdout": "ok\n"
+      }
+    ]
+  },
+  "luac": {
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+}

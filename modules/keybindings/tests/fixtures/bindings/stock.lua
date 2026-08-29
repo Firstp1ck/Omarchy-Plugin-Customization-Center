@@ -1,0 +1,2 @@
+-- Keep only your personal keybinding overrides here.
+-- o.bind("SUPER + SHIFT + R", "SSH", "alacritty -e ssh your-server")

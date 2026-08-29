@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "defaults-draft-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "changes"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "browser": {"$ref": "#/$defs/change"},
+        "terminal": {"$ref": "#/$defs/change"},
+        "editor": {"$ref": "#/$defs/change"},
+        "agent": {"$ref": "#/$defs/change"}
+      }
+    }
+  },
+  "$defs": {
+    "change": {
+      "type": "object",
+      "required": ["choice", "install"],
+      "additionalProperties": false,
+      "properties": {
+        "choice": {"type": "string", "minLength": 1},
+        "install": {"type": "boolean"}
+      }
+    }
+  }
+}

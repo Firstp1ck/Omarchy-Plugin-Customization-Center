@@ -1,0 +1,29 @@
+bindd
+	modmask: 64
+	submap:
+	key: SPACE
+	keycode: 0
+	catchall: false
+	description: Open app launcher
+	dispatcher: __lua
+	arg: 6
+
+bindle
+	modmask: 0
+	submap:
+	key: XF86AudioRaiseVolume
+	keycode: 0
+	catchall: false
+	description: Volume up
+	dispatcher: __lua
+	arg: 9
+
+bindd
+	modmask: 68
+	submap:
+	key: SUPER + CTRL + code:94
+	keycode: 0
+	catchall: false
+	description: Physical key
+	dispatcher: __lua
+	arg: 10

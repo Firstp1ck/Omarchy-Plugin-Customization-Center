@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {"id":"omarchy-menu","title":"Omarchy menu","command":"omarchy-menu toggle","category":"Menus","mirrors":"default/hypr/bindings/utilities.lua:1"},
+    {"id":"screenshot","title":"Screenshot","command":"omarchy-capture-screenshot","category":"Capture","mirrors":"default/hypr/bindings/utilities.lua"},
+    {"id":"lock","title":"Lock system","command":"omarchy-system-lock","category":"System","mirrors":"default/hypr/bindings/utilities.lua"},
+    {"id":"keybindings","title":"Show keybindings","command":"omarchy-menu-keybindings","category":"Menus","mirrors":"default/hypr/bindings/utilities.lua"},
+    {"id":"audio","title":"Audio panel","command":"omarchy-shell shell toggle omarchy.audio","category":"Panels","mirrors":"default/hypr/bindings/utilities.lua"}
+  ]
+}

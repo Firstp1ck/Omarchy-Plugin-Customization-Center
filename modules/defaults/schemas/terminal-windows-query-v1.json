@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "defaults-terminal-windows-query-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "available", "count", "reason"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "available": {"type": "boolean"},
+    "count": {"type": ["integer", "null"], "minimum": 0},
+    "reason": {"type": "string"}
+  }
+}

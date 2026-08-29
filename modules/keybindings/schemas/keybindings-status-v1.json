@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "keybindings-status-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "revision", "capabilities", "records", "disabledDefaults", "orphanedDisables", "model", "managedBlock", "switches", "warnings", "keymapContext", "catalogEntries"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "revision": {"type": "string"},
+    "capabilities": {"type": "object"},
+    "records": {"type": "array", "items": {"type": "object"}},
+    "disabledDefaults": {"type": "array", "items": {"type": "object"}},
+    "orphanedDisables": {"type": "array", "items": {"type": "object"}},
+    "model": {"type": "object"},
+    "managedBlock": {
+      "type": "object",
+      "required": ["state", "drift", "beginLine", "endLine", "problems"],
+      "additionalProperties": false,
+      "properties": {
+        "state": {"enum": ["absent", "present", "duplicate", "unterminated", "reversed", "nested"]},
+        "drift": {"type": "boolean"},
+        "beginLine": {"type": ["integer", "null"]},
+        "endLine": {"type": ["integer", "null"]},
+        "problems": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "switches": {"type": "array", "items": {"type": "string"}},
+    "warnings": {"type": "array", "items": {"type": "object"}},
+    "keymapContext": {"type": "object"},
+    "catalogEntries": {"type": "array", "items": {"type": "object"}}
+  }
+}

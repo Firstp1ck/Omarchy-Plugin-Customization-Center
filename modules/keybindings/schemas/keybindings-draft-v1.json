@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "keybindings-draft-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "expectedRevision", "model"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "expectedRevision": {"type": "string"},
+    "model": {"$ref": "keybindings-model-v1.json"},
+    "recoveryAction": {"enum": ["rewrite", "forget"]}
+  }
+}

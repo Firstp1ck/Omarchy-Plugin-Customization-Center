@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "names": {
+    "Tab":"Tab", "Return":"Return", "space":"space", "Escape":"Escape", "BackSpace":"BackSpace",
+    "Delete":"Delete", "Insert":"Insert", "Home":"Home", "End":"End", "Prior":"Prior", "Next":"Next",
+    "Left":"Left", "Right":"Right", "Up":"Up", "Down":"Down", "Print":"Print", "comma":"comma",
+    "period":"period", "slash":"slash", "minus":"minus", "equal":"equal", "grave":"grave",
+    "XF86AudioPlay":"XF86AudioPlay", "XF86AudioMute":"XF86AudioMute", "XF86AudioRaiseVolume":"XF86AudioRaiseVolume",
+    "XF86AudioLowerVolume":"XF86AudioLowerVolume", "XF86MonBrightnessUp":"XF86MonBrightnessUp", "XF86MonBrightnessDown":"XF86MonBrightnessDown"
+  }
+}

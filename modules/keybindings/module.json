@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "keybindings",
+  "title": "Keybindings",
+  "description": "Inspect and manage global keyboard command bindings",
+  "icon": "󰌌",
+  "navOrder": 70,
+  "page": "Page.qml",
+  "backend": "backend",
+  "draftSchema": "schemas/keybindings-draft-v1.json",
+  "statusSchema": "schemas/keybindings-status-v1.json",
+  "storedDocuments": [{"kind": "model", "schema": "schemas/keybindings-model-v1.json", "location": "{xdg_config_home}/omarchy/customization-center/keybindings.json"}],
+  "coreServices": ["hyprctl", "managed_block", "lua"],
+  "queries": ["normalize_chord", "catalog_search"]
+}

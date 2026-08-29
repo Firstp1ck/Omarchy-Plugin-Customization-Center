@@ -110,13 +110,19 @@ QtObject {
         })
     }
 
+    function isRead(command) {
+        return ["modules", "capabilities", "status", "validate", "plan", "query", "history", "transaction"].indexOf(command) >= 0
+    }
+
     function timeoutFor(command, plan, forceMaximum) {
         if (forceMaximum && (command === "apply" || command === "rollback"))
             return maximumMutationTimeoutMs
         if (["modules", "capabilities", "status", "history", "transaction", "confirm"].indexOf(command) >= 0)
             return 10000
-        if (["validate", "plan", "query"].indexOf(command) >= 0)
+        if (["validate", "plan", "query", "abandon", "restore", "resolve", "draft-asset-add"].indexOf(command) >= 0)
             return 30000
+        if (command === "recover")
+            return maximumMutationTimeoutMs
         if (command === "apply" || command === "rollback") {
             var total = 15000
             var operations = plan && plan.operations ? plan.operations : []
@@ -137,6 +143,25 @@ QtObject {
             argv.push("--confirm", keys[i])
         return argv
     }
+
+    function buildAbandonArgv(transactionId) { return ["abandon", transactionId] }
+    function buildRecoverArgv() { return ["recover"] }
+    function buildRestoreArgv(transactionId, path) { return ["restore", transactionId, "--path", path] }
+    function buildResolveArgv(transactionId, operationId) { return ["resolve", transactionId, "--operation", operationId] }
+    function buildCapabilitiesArgv(moduleId) {
+        return moduleId ? ["capabilities", moduleId] : ["capabilities"]
+    }
+    function buildHistoryFilteredArgv(moduleId, limit, state) {
+        var argv = ["history"]
+        if (moduleId)
+            argv.push("--module", moduleId)
+        if (limit !== undefined && limit !== null && String(limit) !== "")
+            argv.push("--limit", String(limit))
+        if (state)
+            argv.push("--state", state)
+        return argv
+    }
+    function buildDraftAssetAddArgv(moduleId, path) { return ["draft", "asset-add", moduleId, "--path", path] }
 
     function finishRead(moduleId) {
         var key = moduleId || "__global"

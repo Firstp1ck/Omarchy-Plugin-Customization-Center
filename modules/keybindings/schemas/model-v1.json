@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "keybindings-model-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "bindings", "disabled"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "bindings": {"type": "array", "items": {"$ref": "#/$defs/binding"}},
+    "disabled": {"type": "array", "items": {"$ref": "#/$defs/disable"}}
+  },
+  "$defs": {
+    "binding": {
+      "type": "object",
+      "required": ["id", "enabled", "chord", "description", "action", "flags"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+        "enabled": {"type": "boolean"},
+        "chord": {"$ref": "#/$defs/chord"},
+        "description": {"type": "string", "minLength": 1, "maxLength": 160},
+        "action": {"$ref": "#/$defs/action"},
+        "flags": {"$ref": "#/$defs/flags"}
+      }
+    },
+    "chord": {
+      "type": "object",
+      "required": ["sourceKeys", "modifiers", "key"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceKeys": {"type": "string", "minLength": 1, "maxLength": 128},
+        "modifiers": {"type": "array", "uniqueItems": true, "items": {"enum": ["SUPER", "CTRL", "ALT", "SHIFT"]}},
+        "key": {
+          "oneOf": [
+            {"type": "object", "required": ["kind", "value"], "additionalProperties": false, "properties": {"kind": {"const": "keysym"}, "value": {"type": "string", "minLength": 1, "maxLength": 128}}},
+            {"type": "object", "required": ["kind", "value"], "additionalProperties": false, "properties": {"kind": {"const": "code"}, "value": {"type": "integer", "minimum": 8, "maximum": 255}}}
+          ]
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["type", "command", "catalogId"],
+      "additionalProperties": false,
+      "properties": {"type": {"const": "exec"}, "command": {"type": "string", "minLength": 1, "maxLength": 4096}, "catalogId": {"type": ["string", "null"]}}
+    },
+    "flags": {
+      "type": "object",
+      "required": ["locked", "release", "repeating", "nonConsuming", "autoConsuming", "bypass"],
+      "additionalProperties": false,
+      "properties": {
+        "locked": {"type": "boolean"}, "release": {"type": "boolean"}, "repeating": {"type": "boolean"},
+        "nonConsuming": {"type": "boolean"}, "autoConsuming": {"type": "boolean"}, "bypass": {"type": "boolean"}
+      }
+    },
+    "disable": {
+      "type": "object",
+      "required": ["id", "sourceKeys", "target", "reason", "replacedBy"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+        "sourceKeys": {"type": "string", "minLength": 1, "maxLength": 128},
+        "target": {
+          "type": "object", "required": ["kind", "module", "description", "identity"], "additionalProperties": false,
+          "properties": {"kind": {"enum": ["omarchy_default", "managed"]}, "module": {"type": "string"}, "description": {"type": "string"}, "identity": {"type": "string"}}
+        },
+        "reason": {"enum": ["disabled", "replaced"]},
+        "replacedBy": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

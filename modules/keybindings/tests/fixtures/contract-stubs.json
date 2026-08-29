@@ -1,0 +1,6 @@
+{
+  "hyprctl": {"exit_code": 0, "stdout": ""},
+  "lua": {"exit_code": 0, "stdout": ""},
+  "luac": {"exit_code": 0, "stdout": ""},
+  "xkbcli": {"exit_code": 1, "stderr": "keymap unavailable\n"}
+}
