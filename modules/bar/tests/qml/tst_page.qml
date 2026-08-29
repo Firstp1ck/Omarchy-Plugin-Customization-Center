@@ -18,7 +18,8 @@ TestCase {
                 left: [{ key: "b:left:0", origin: { section: "left", index: 0 }, id: "omarchy.menu", settings: {}, form: "object" }],
                 center: [{ key: "b:center:0", origin: { section: "center", index: 0 }, id: "omarchy.clock", settings: {}, form: "object" }], right: [] } },
             catalog: [{ id: "omarchy.menu", displayName: "Menu", presence: "shell", allowMultiple: false, defaultSection: "left", defaults: {}, schema: { ok: true, fields: [] } },
-                      { id: "omarchy.clock", displayName: "Clock", presence: "shell", allowMultiple: false, defaultSection: "center", defaults: {}, schema: { ok: true, fields: [] } }],
+                      { id: "omarchy.clock", displayName: "Clock", presence: "shell", allowMultiple: false, defaultSection: "center", defaults: {}, schema: { ok: true, fields: [] } },
+                      { id: "acme.widget", displayName: "Acme Widget", presence: "shell", allowMultiple: true, defaultSection: "right", defaults: {}, schema: { ok: true, fields: [] } }],
             barOptions: [{ id: "omarchy.bar", name: "Built-in", available: true }, { id: "local.neon", name: "Neon", available: true }]
         }})
     }
@@ -45,6 +46,13 @@ TestCase {
         page.handlePayload({ selectBar: "local.neon" }); compare(spy.count, 1)
         var position = findChild(page, "positionSelector"); verify(position !== null)
         position.changed("left"); compare(spy.count, 2); compare(spy.signalArguments[1][0].bar.position, "left")
+    }
+    function test_add_widget_payload_drafts_without_apply() {
+        var page = createPage(); var patchSpy = signalSpy.createObject(testCase, { target: page, signalName: "requestDraftPatch" })
+        var applySpy = signalSpy.createObject(testCase, { target: page, signalName: "requestApply" })
+        page.handlePayload({ addWidget: "acme.widget" })
+        compare(patchSpy.count, 1); compare(applySpy.count, 0)
+        compare(patchSpy.signalArguments[0][0].bar.layout.right[0].id, "acme.widget")
     }
     function test_unknown_bar_payload_does_not_mutate() {
         var page = createPage(); var spy = signalSpy.createObject(testCase, { target: page, signalName: "requestDraftPatch" })

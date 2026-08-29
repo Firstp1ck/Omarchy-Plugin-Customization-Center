@@ -98,3 +98,9 @@ Observed and resolved during validation:
 2. Register `plugins` immediately after `bar`.
 3. Add the generic bar `{addWidget}` deep-link handler and cross-module QML test.
 4. Run canonical contract, full pytest, qmllint, and live Add/Update/Remove/Clone plus non-bar enable/disable checks.
+
+## Integration-owner completion
+
+The parent registered `plugins` after `bar` and added the generic `{addWidget: id}` handler to the bar page. The handler drafts one discovered widget and never applies it. Bar QML coverage asserts the exact cross-module payload and zero Apply signals.
+
+Plugin tests, bar tests, targeted canonical contract checks, the full repository suite, and `qmllint` all passed. Live lifecycle and VM checks remain open.

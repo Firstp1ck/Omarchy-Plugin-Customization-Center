@@ -113,6 +113,12 @@ FocusScope {
             else toastText = "Bar option is not available: " + payload.selectBar
             options.focusFirst()
         }
+        if (typeof payload.addWidget === "string") {
+            var widget = catalogItem(payload.addWidget)
+            if (widget && widget.presence === "shell") addWidget(widget)
+            else toastText = "Widget is not available: " + payload.addWidget
+            preview.forceActiveFocus()
+        }
     }
 
     Bar.ReorderController { id: reorder; layout: root.bar.layout || ({ left: [], center: [], right: [] }); onMoved: (key, section, index, layout) => root.applyLayout(layout); onRemoved: (key, layout) => root.applyLayout(layout) }
