@@ -12,6 +12,6 @@
   "storedDocuments": [
     {"kind": "sidecar", "schema": "schemas/sidecar-v1.json", "location": "{module_state}/<slug>.json"}
   ],
-  "coreServices": ["shell_ipc", "staging"],
-  "queries": ["preview"]
+  "coreServices": ["shell_ipc", "staging", "toml_writer"],
+  "queries": ["preview", "import"]
 }

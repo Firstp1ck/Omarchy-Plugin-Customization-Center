@@ -74,7 +74,8 @@ SECTIONS["image-picker"] = [
 
 
 def defaults(name: str, palette: dict[str, Any]) -> dict[str, Any]:
-    values = {key: default for key, _, default, _ in SECTIONS[name]}
+    values = {key: (palette[default] if isinstance(default, str) and default in palette and default not in ROLES else default)
+              for key, _, default, _ in SECTIONS[name]}
     if name == "lock":
         from .palette import mix
         values["placeholder"] = mix(palette["foreground"], palette["background"], .34)

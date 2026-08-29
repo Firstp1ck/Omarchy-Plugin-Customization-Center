@@ -100,6 +100,49 @@ class Paths:
         except FileNotFoundError:
             return default
 
+    def read_regular(self, path: str | Path, max_bytes: int) -> bytes:
+        """Read a bounded regular file without following symlinks or accepting an inode swap."""
+        target = Path(path).absolute()
+        if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes < 0:
+            raise ValueError("max_bytes must be a non-negative integer")
+        try:
+            before = target.lstat()
+        except FileNotFoundError as error:
+            raise CcError("unsupported_config", f"File does not exist: {target}", {"path": str(target)}) from error
+        if not stat.S_ISREG(before.st_mode) or not self.symlink_safe(target):
+            raise CcError("unsupported_config", f"File is not a safe regular file: {target}", {"path": str(target)})
+        if before.st_size > max_bytes:
+            raise CcError("unsupported_config", f"File exceeds the {max_bytes} byte limit: {target}",
+                          {"path": str(target), "size": before.st_size, "maxBytes": max_bytes})
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+        try:
+            descriptor = os.open(target, flags)
+        except OSError as error:
+            raise CcError("unsupported_config", f"File could not be opened safely: {target}",
+                          {"path": str(target)}) from error
+        try:
+            after = os.fstat(descriptor)
+            if not stat.S_ISREG(after.st_mode) or (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+                raise CcError("unsupported_config", f"File changed while opening: {target}", {"path": str(target)})
+            if after.st_size > max_bytes:
+                raise CcError("unsupported_config", f"File exceeds the {max_bytes} byte limit: {target}",
+                              {"path": str(target), "size": after.st_size, "maxBytes": max_bytes})
+            chunks: list[bytes] = []
+            remaining = max_bytes + 1
+            while remaining:
+                chunk = os.read(descriptor, min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            data = b"".join(chunks)
+            if len(data) > max_bytes:
+                raise CcError("unsupported_config", f"File exceeds the {max_bytes} byte limit: {target}",
+                              {"path": str(target), "size": len(data), "maxBytes": max_bytes})
+            return data
+        finally:
+            os.close(descriptor)
+
     def readlink(self, path: str | Path, default: Any = None) -> str | Any:
         try:
             return os.readlink(path)

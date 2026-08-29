@@ -37,7 +37,7 @@ def test_fault_after_directory_swap_rolls_back_byte_identically(isolated_home, s
     target.mkdir(parents=True)
     original = b'legacy theme bytes\n'
     (target / "colors.toml").write_bytes(original)
-    draft = json.loads(json.dumps(SAMPLE)); draft["acceptedWarnings"] = ["themes_replace_unmanaged:ocean-focus"]
+    draft = json.loads(json.dumps(SAMPLE)); draft["acceptedWarnings"] = [*draft["acceptedWarnings"], "themes_replace_unmanaged:ocean-focus"]
     paths = Paths.from_env(); executor, revision = setup_executor(paths)
     module = executor.registry.module("themes")
     status = module.status(build_context("themes", "read", paths=paths, registry=executor.registry, plugin_dir=ROOT))

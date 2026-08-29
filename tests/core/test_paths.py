@@ -1,7 +1,9 @@
 import os
 from pathlib import Path
 
-from customization_center.core import Paths
+import pytest
+
+from customization_center.core import CcError, Paths
 
 
 def test_paths_resolve_and_enforce_allowlist(isolated_home):
@@ -39,3 +41,38 @@ def test_symlink_component_and_private_files(isolated_home):
     assert temp.parent.name == "tmp" and temp.stat().st_mode & 0o777 == 0o600
     staging = paths.staging_dir("menu", "p1")
     assert staging.stat().st_mode & 0o777 == 0o700
+
+
+def test_read_regular_is_bounded_and_rejects_symlinks_and_non_regular_files(isolated_home):
+    paths = Paths.from_env()
+    regular = isolated_home / "asset.bin"
+    regular.write_bytes(b"asset-bytes")
+    assert paths.read_regular(regular, 11) == b"asset-bytes"
+    with pytest.raises(CcError, match="exceeds"):
+        paths.read_regular(regular, 10)
+    link = isolated_home / "asset-link.bin"
+    link.symlink_to(regular)
+    with pytest.raises(CcError, match="safe regular"):
+        paths.read_regular(link, 100)
+    with pytest.raises(CcError, match="safe regular"):
+        paths.read_regular(isolated_home, 100)
+    with pytest.raises(ValueError):
+        paths.read_regular(regular, -1)
+
+
+def test_read_regular_detects_inode_change_between_lstat_and_open(isolated_home, monkeypatch):
+    paths = Paths.from_env()
+    target = isolated_home / "raced.bin"
+    replacement = isolated_home / "replacement.bin"
+    target.write_bytes(b"before")
+    replacement.write_bytes(b"after")
+    original_open = os.open
+
+    def swapped_open(path, flags, *args, **kwargs):
+        Path(path).unlink()
+        replacement.rename(path)
+        return original_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", swapped_open)
+    with pytest.raises(CcError, match="changed while opening"):
+        paths.read_regular(target, 100)

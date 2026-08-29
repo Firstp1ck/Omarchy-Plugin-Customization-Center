@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["schemaVersion", "active", "themes", "builtInSlugs", "machineOverride", "userTemplates", "wallpaperSources", "iconThemes", "openPreviewTransaction"],
+  "required": ["schemaVersion", "active", "themes", "builtInSlugs", "machineOverride", "userTemplates", "wallpaperSources", "iconThemes", "openPreviewTransaction", "tryInShellEligibility"],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": {"const": 1},
@@ -32,6 +32,14 @@
     },
     "userTemplates": {"type": "array", "items": {"type": "string"}},
     "wallpaperSources": {"type": "array"}, "iconThemes": {"type": "array", "items": {"type": "string"}},
-    "openPreviewTransaction": {"type": ["object", "null"]}
+    "openPreviewTransaction": {"type": ["object", "null"]},
+    "tryInShellEligibility": {
+      "type": "object", "additionalProperties": false,
+      "required": ["available", "shellReachable", "exactRestore", "reason"],
+      "properties": {
+        "available": {"type": "boolean"}, "shellReachable": {"type": "boolean"},
+        "exactRestore": {"type": "boolean"}, "reason": {"type": "string"}
+      }
+    }
   }
 }

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import tomllib
+import re
 from typing import Any
+
+from customization_center.core import toml_writer
 
 from .palette import HEX_RE, PALETTE_ORDER, valid_gradient
 from .sections import BORDER_REFS, CONTROL_ROLES, ROLES, SECTIONS
@@ -9,17 +11,30 @@ from .sections import BORDER_REFS, CONTROL_ROLES, ROLES, SECTIONS
 _GROUP_BREAKS = {"accent", "background", "foreground", "red", "bright_red", "hyprland_active_border"}
 
 
+def _scalar(value: Any) -> str:
+    rendered = toml_writer.dumps({"value": value}).strip()
+    toml_writer.reparse(rendered + "\n", {"value": value})
+    return rendered.split("=", 1)[1].strip()
+
+
 def colors_toml(palette: dict[str, Any]) -> str:
     lines: list[str] = []
+    expected: dict[str, Any] = {}
     for key in PALETTE_ORDER:
         if key in _GROUP_BREAKS and lines:
             lines.append("")
-        lines.append(f'{key} = "{palette[key]}"')
+        value = palette[key]
+        expected[key] = value
+        lines.append(f"{key} = {_scalar(value)}")
     borders = [(key, palette.get(key)) for key in ("hyprland_active_border", "hyprland_inactive_border") if palette.get(key)]
     if borders:
         lines.append("")
-        lines.extend(f'{key} = "{value}"' for key, value in borders)
-    return "\n".join(lines) + "\n"
+        for key, value in borders:
+            expected[key] = value
+            lines.append(f"{key} = {_scalar(value)}")
+    result = "\n".join(lines) + "\n"
+    toml_writer.reparse(result, expected)
+    return result
 
 
 def _decimal(value: Any) -> str:
@@ -56,13 +71,14 @@ def validate_section(name: str, value: Any) -> list[tuple[str, str]]:
             valid = _valid_color(candidate, form == "control-color")
         elif form == "border":
             valid = _valid_color(candidate, name == "controls") or candidate in BORDER_REFS or valid_gradient(candidate)
+            if name == "polkit" and key == "border" and candidate not in BORDER_REFS:
+                valid = False
         elif form == "alpha":
             valid = isinstance(candidate, (int, float)) and not isinstance(candidate, bool) and 0 <= candidate <= 1
         elif form == "bool":
             valid = isinstance(candidate, bool)
         elif form == "width":
-            valid = isinstance(candidate, str) and 1 <= len(candidate.split()) <= 4 and all(
-                token.isdigit() and 0 <= int(token) <= 64 for token in candidate.split())
+            valid = isinstance(candidate, str) and bool(re.fullmatch(r"(?:[0-9]|[1-5][0-9]|6[0-4])(?: (?:[0-9]|[1-5][0-9]|6[0-4])){0,3}", candidate))
         elif form == "scale":
             valid = isinstance(candidate, (int, float)) and not isinstance(candidate, bool) and .25 <= candidate <= 4
         elif form == "bar-size":
@@ -79,15 +95,11 @@ def validate_section(name: str, value: Any) -> list[tuple[str, str]]:
 
 
 def _serialize(form: str, value: Any) -> str:
-    if form in {"color", "control-color", "border"}:
-        return f'"{value}"'
     if form in {"alpha", "scale"}:
         return _decimal(value)
-    if form == "width":
-        return value if " " not in value else f'"{value}"'
-    if form == "bool":
-        return "true" if value else "false"
-    return str(value)
+    if form == "width" and " " not in value:
+        return value
+    return _scalar(value)
 
 
 def section_toml(name: str, value: dict[str, Any]) -> str:
@@ -95,38 +107,52 @@ def section_toml(name: str, value: dict[str, Any]) -> str:
     if errors:
         raise ValueError("; ".join(f"{key}: {message}" for key, message in errors))
     lines = [f"[{name}]"]
+    expected: dict[str, Any] = {}
     for key, form, _, _ in SECTIONS[name]:
         if value.get(key) is not None:
-            lines.append(f"{key} = {_serialize(form, value[key])}")
+            serialized = _serialize(form, value[key])
+            lines.append(f"{key} = {serialized}")
+            expected[key] = int(value[key]) if form == "width" and " " not in value[key] else value[key]
     result = "\n".join(lines) + "\n"
-    parsed = tomllib.loads(result)
-    if name not in parsed or set(parsed[name]) != {key for key, item in value.items() if item is not None}:
-        raise ValueError("section did not round trip")
+    toml_writer.reparse(result, {name: expected})
+    parsed = parse_shell(result)
+    if name not in parsed or set(parsed[name]) != set(expected):
+        raise ValueError("section did not round trip through the shell parser")
     return result
 
 
 def parse_shell(text: str) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
     section: dict[str, Any] | None = None
+    section_re = re.compile(r"^\[([A-Za-z0-9_-]+)\]\s*(?:#.*)?$")
+    quoted_re = re.compile(r'^([A-Za-z0-9_-]+)\s*=\s*"([^"\']*)"$')
+    number_re = re.compile(r"^([A-Za-z0-9_-]+)\s*=\s*(-?\d+(?:\.\d+)?)$")
+    width_re = re.compile(r"^([A-Za-z0-9_-]+)\s*=\s*((?:-?\d+(?:\.\d+)?\s+){1,3}-?\d+(?:\.\d+)?)$")
+    word_re = re.compile(r"^([A-Za-z0-9_-]+)\s*=\s*([A-Za-z][A-Za-z0-9_-]*)$")
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        if line.startswith("[") and line.endswith("]"):
-            name = line[1:-1]
-            section = result.setdefault(name, {})
+        match = section_re.fullmatch(line)
+        if match:
+            section = result.setdefault(match.group(1), {})
             continue
-        if section is None or "=" not in line:
+        if section is None:
             continue
-        key, raw_value = (part.strip() for part in line.split("=", 1))
-        if raw_value.startswith('"') and raw_value.endswith('"'):
-            value: Any = raw_value[1:-1]
-        elif raw_value in {"true", "false"}:
-            value = raw_value == "true"
-        else:
-            try:
-                value = float(raw_value) if "." in raw_value else int(raw_value)
-            except ValueError:
-                continue
-        section[key] = value
+        match = quoted_re.fullmatch(line)
+        if match:
+            section[match.group(1)] = match.group(2); continue
+        match = width_re.fullmatch(line)
+        if match:
+            section[match.group(1)] = match.group(2); continue
+        match = number_re.fullmatch(line)
+        if match:
+            raw_value = match.group(2)
+            section[match.group(1)] = float(raw_value) if "." in raw_value else int(raw_value); continue
+        match = word_re.fullmatch(line)
+        if match:
+            value: Any = match.group(2)
+            if value in {"true", "false"}:
+                value = value == "true"
+            section[match.group(1)] = value
     return result

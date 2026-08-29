@@ -21,5 +21,16 @@
   "wallpapers": [],
   "preferredWallpaper": null,
   "iconTheme": null,
-  "acceptedWarnings": []
+  "acceptedWarnings": [
+    "themes_contrast_low:muted/background",
+    "themes_contrast_low:lock.text/white",
+    "themes_contrast_low:lock.placeholder/white",
+    "themes_contrast_low:image-picker.text/white",
+    "themes_contrast_low:controls.normal-border/surface",
+    "themes_contrast_low:controls.hover-cursor-border/surface",
+    "themes_contrast_low:controls.focus-border/surface",
+    "themes_contrast_low:launcher.selected-border/surface",
+    "themes_contrast_low:menu.selected-border/surface",
+    "themes_contrast_low:image-picker.unselected-border/surface"
+  ]
 }

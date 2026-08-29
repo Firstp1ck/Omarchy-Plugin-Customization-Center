@@ -26,10 +26,19 @@ def image_info(data: bytes, extension: str) -> tuple[int, int]:
         return struct.unpack("<HH", data[6:10])
     if ext == "bmp" and len(data) >= 26:
         width, height = struct.unpack("<ii", data[18:26]); return abs(width), abs(height)
-    if ext == "webp" and len(data) >= 30 and data[12:16] == b"VP8X":
-        width = int.from_bytes(data[24:27], "little") + 1
-        height = int.from_bytes(data[27:30], "little") + 1
-        return width, height
+    if ext == "webp" and len(data) >= 20:
+        chunk = data[12:16]
+        declared = int.from_bytes(data[16:20], "little")
+        if declared > len(data) - 20:
+            raise ValueError("dimensions")
+        payload = data[20:20 + declared] if declared else data[20:]
+        if chunk == b"VP8X" and len(payload) >= 10:
+            return int.from_bytes(payload[4:7], "little") + 1, int.from_bytes(payload[7:10], "little") + 1
+        if chunk == b"VP8 " and len(payload) >= 10 and payload[3:6] == b"\x9d\x01\x2a":
+            return int.from_bytes(payload[6:8], "little") & 0x3fff, int.from_bytes(payload[8:10], "little") & 0x3fff
+        if chunk == b"VP8L" and len(payload) >= 5 and payload[0] == 0x2f:
+            bits = int.from_bytes(payload[1:5], "little")
+            return (bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1
     if ext in {"jpg", "jpeg"}:
         offset = 2
         while offset + 9 <= len(data):
