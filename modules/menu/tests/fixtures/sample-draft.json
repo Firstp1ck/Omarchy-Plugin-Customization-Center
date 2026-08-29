@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "module": "menu",
+  "baseRevision": "",
+  "semantics": "full-shadow",
+  "shape": "direct",
+  "bom": false,
+  "entries": [
+    {
+      "draftId": "sample-personal",
+      "id": "personal",
+      "originalId": null,
+      "origin": "custom",
+      "kind": "submenu",
+      "fields": {"icon": "󰋜", "label": "Personal"},
+      "passthrough": {},
+      "raw": null,
+      "deleted": false
+    }
+  ],
+  "wrapperSiblings": [],
+  "recovery": null
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "menu",
+  "title": "Personal menu",
+  "description": "Create and organize personal Omarchy menu entries.",
+  "icon": "󰍜",
+  "navOrder": 3,
+  "page": "Page.qml",
+  "backend": "backend",
+  "draftSchema": "schemas/menu-draft-v1.json",
+  "statusSchema": "schemas/menu-status-v1.json",
+  "storedDocuments": [
+    {
+      "kind": "menu-document",
+      "schema": "schemas/menu-document-v1.json",
+      "location": "{home}/.config/omarchy/extensions/omarchy-menu.jsonc"
+    }
+  ],
+  "coreServices": ["drafts"],
+  "queries": ["route", "search-tokens", "projection"]
+}

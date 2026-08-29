@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "query-search-tokens-v1.json", "type": "object",
+  "required": ["schemaVersion", "id", "label", "leafTokens", "aliases", "descriptionWords"], "additionalProperties": false,
+  "properties": {"schemaVersion": {"const": 1}, "id": {"type": "string"}, "label": {"type": "string"}, "leafTokens": {"type": "array", "items": {"type": "string"}}, "aliases": {"type": "array", "items": {"type": "string"}}, "descriptionWords": {"type": "array", "items": {"type": "string"}}}
+}

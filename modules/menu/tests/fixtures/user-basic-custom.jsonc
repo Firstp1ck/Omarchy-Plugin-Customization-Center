@@ -1,0 +1,4 @@
+{
+  "personal": {"label":"Personal"},
+  "personal.notes": {"label":"Notes","action":"omarchy-launch-editor ~/notes"}
+}

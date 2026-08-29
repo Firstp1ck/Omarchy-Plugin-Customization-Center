@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "query-projection-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "effective"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "effective": {"type": "object"}
+  }
+}

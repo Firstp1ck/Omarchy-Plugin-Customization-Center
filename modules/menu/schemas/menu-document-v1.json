@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "menu-document-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "shape", "bom", "entries", "wrapperSiblings", "duplicates"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "shape": {"enum": ["direct", "wrapper"]},
+    "bom": {"type": "boolean"},
+    "entries": {"type": "array", "items": {"type": "object", "required": ["id", "valueKind", "fields", "declared", "known", "unknown", "typeErrors"], "additionalProperties": true,
+      "properties": {"id": {"type": "string"}, "valueKind": {"enum": ["object", "other"]}, "fields": {"type": "object"}, "declared": {"type": "array", "items": {"type": "string"}}, "known": {"type": "array", "items": {"type": "string"}}, "unknown": {"type": "array", "items": {"type": "string"}}, "typeErrors": {"type": "array"}}}},
+    "wrapperSiblings": {"type": "array"},
+    "duplicates": {"type": "array"}
+  }
+}

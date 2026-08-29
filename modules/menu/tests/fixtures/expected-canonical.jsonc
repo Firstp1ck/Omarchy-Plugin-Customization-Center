@@ -1,0 +1,9 @@
+{
+  // Omarchy menu extension. Written by Customization Center (firstpick.customization-center).
+  // Editing by hand is fine; the next save from the center rewrites the file and drops
+  // comments and formatting. Entries and unknown fields are kept. Format: docs/menu.md.
+  // Backups: ~/.local/state/omarchy/customization-center/backups/
+
+  // personal
+  "personal": {"icon":"󰋜","label":"Personal"}
+}

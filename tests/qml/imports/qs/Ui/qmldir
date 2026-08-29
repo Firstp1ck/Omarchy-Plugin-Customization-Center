@@ -7,3 +7,4 @@ Dropdown 1.0 Dropdown.qml
 SearchableDropdown 1.0 SearchableDropdown.qml
 MultiSelect 1.0 MultiSelect.qml
 BorderSurface 1.0 BorderSurface.qml
+ConfirmDialog 1.0 ConfirmDialog.qml

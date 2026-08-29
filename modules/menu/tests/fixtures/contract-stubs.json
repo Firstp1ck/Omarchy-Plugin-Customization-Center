@@ -1,0 +1,11 @@
+{
+  "omarchy-menu": {
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "",
+    "byArgs": [
+      {"args": ["ping"], "stdout": "ok\n"},
+      {"args": ["refresh"], "stdout": "ok\n"}
+    ]
+  }
+}

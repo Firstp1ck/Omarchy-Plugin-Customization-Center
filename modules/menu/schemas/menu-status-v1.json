@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "menu-status-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "revision", "default", "user", "documentState", "document", "effective", "externalBackups", "diagnostics", "overrideSemantics", "providers", "guardReaders", "modelHash", "modelRecognized"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1}, "revision": {"type": "string"},
+    "default": {"$ref": "#/$defs/source"}, "user": {"$ref": "#/$defs/source"},
+    "documentState": {"enum": ["ok", "absent", "empty", "malformed", "hazard", "duplicate-keys", "unsupported"]},
+    "document": {"type": ["object", "null"]}, "effective": {"type": "object"},
+    "externalBackups": {"type": "array"}, "diagnostics": {"type": "array"},
+    "overrideSemantics": {"enum": ["full-shadow", "sparse"]}, "providers": {"type": "array", "items": {"type": "string"}},
+    "guardReaders": {"type": "array", "items": {"type": "string"}}, "modelHash": {"type": "string"}, "modelRecognized": {"type": "boolean"}
+  },
+  "$defs": {"source": {"type": "object", "required": ["schemaVersion", "path", "exists", "size", "mode", "sha256", "parse", "runtimeEntryCount"], "additionalProperties": false,
+    "properties": {"schemaVersion": {"const": 1}, "path": {"type": "string"}, "exists": {"type": "boolean"}, "size": {"type": "integer"}, "mode": {"type": ["integer", "null"]}, "sha256": {"type": ["string", "null"]}, "parse": {"enum": ["ok", "empty", "failed", "hazard"]}, "runtimeEntryCount": {"type": "integer"}}}}
+}

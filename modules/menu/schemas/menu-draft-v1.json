@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "menu-draft-v1.json",
+  "type": "object",
+  "required": ["schemaVersion", "module", "baseRevision", "semantics", "shape", "bom", "entries", "wrapperSiblings", "recovery"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "module": {"const": "menu"},
+    "baseRevision": {"type": "string"},
+    "semantics": {"enum": ["full-shadow", "sparse"]},
+    "shape": {"enum": ["direct", "wrapper"]},
+    "bom": {"const": false},
+    "entries": {"type": "array", "items": {"type": "object", "required": ["draftId", "id", "originalId", "origin", "kind", "fields", "passthrough", "raw", "deleted"], "additionalProperties": false,
+      "properties": {
+        "draftId": {"type": "string", "minLength": 1}, "id": {"type": "string"}, "originalId": {"type": ["string", "null"]},
+        "origin": {"enum": ["custom", "shadowed", "preserved"]}, "kind": {"enum": ["submenu", "command", "link", "provider"]},
+        "fields": {"type": "object"}, "passthrough": {"type": "object"}, "raw": {}, "deleted": {"type": "boolean"}
+      }}},
+    "wrapperSiblings": {"type": "array", "items": {"type": "object", "required": ["key", "value"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "value": {}}}},
+    "recovery": {"oneOf": [{"type": "null"}, {"type": "object", "required": ["mode", "backupOfRevision"], "additionalProperties": false, "properties": {"mode": {"const": "replace-after-backup"}, "backupOfRevision": {"type": "string"}}}]}
+  }
+}

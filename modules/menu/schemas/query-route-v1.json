@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "query-route-v1.json", "type": "object",
+  "required": ["schemaVersion", "input", "resolved", "via", "kind", "wouldRunAction"], "additionalProperties": false,
+  "properties": {"schemaVersion": {"const": 1}, "input": {"type": "string"}, "resolved": {"type": "string"}, "via": {"enum": ["id", "alias", "literal", "root"]}, "kind": {"type": ["string", "null"]}, "wouldRunAction": {"type": "boolean"}}
+}
