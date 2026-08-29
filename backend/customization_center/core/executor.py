@@ -312,14 +312,7 @@ class Executor:
                             if code != 0:
                                 raise CcError("handoff_failed", f"Injected handoff exit {code}", {"exitCode": code})
                     results[operation.id] = result
-                    log_entry = {"operationId": operation.id,
-                                 "argv": operation.params.get("argv", []), "exit": result.exit_code,
-                                 "durationMs": result.duration_ms, "stdoutHead": redact(result.stdout_head)[:4096],
-                                 "stderrHead": redact(result.stderr_head)[:4096],
-                                 "timedOut": result.timed_out,
-                                 "writtenSha256": result.written_sha256}
-                    if operation.kind == "ReplaceDirectoryAtomic" and result.stdout_head:
-                        log_entry["directoryReplacement"] = json.loads(result.stdout_head)
+                    log_entry = self._command_log_entry(operation, result, "forward")
                     tx = self._save(tx, completed_operation_ids=tx.completed_operation_ids + (operation.id,),
                                     command_log=tx.command_log + (log_entry,))
                     self.faults.hit(f"after_op:{operation.id}")
@@ -360,12 +353,34 @@ class Executor:
         return list(dict.fromkeys(str(Path(item).absolute()) for item in paths))
 
     @staticmethod
+    def _command_log_entry(operation: Operation, result: OperationResult, phase: str,
+                           inverse_of: str | None = None) -> dict[str, Any]:
+        entry = {"operationId": operation.id, "argv": operation.params.get("argv", []),
+                 "exit": result.exit_code, "durationMs": result.duration_ms,
+                 "stdoutHead": redact(result.stdout_head)[:4096],
+                 "stderrHead": redact(result.stderr_head)[:4096], "timedOut": result.timed_out,
+                 "writtenSha256": result.written_sha256, "phase": phase}
+        if inverse_of is not None:
+            entry["inverseOf"] = inverse_of
+        if operation.kind == "ReplaceDirectoryAtomic" and result.stdout_head:
+            entry["directoryReplacement"] = json.loads(result.stdout_head)
+        return entry
+
+    @staticmethod
+    def _failed_operation_result(operation: Operation, error: Exception, started: float) -> OperationResult:
+        data = getattr(error, "data", {})
+        exit_code = data.get("exitCode") if isinstance(data, dict) else None
+        return OperationResult(operation.id, exit_code if isinstance(exit_code, int) else None, "", str(error),
+                               getattr(error, "code", "") == "timeout",
+                               int((time.monotonic() - started) * 1000), None)
+
+    @staticmethod
     def _results_from_log(tx: Transaction) -> dict[str, OperationResult]:
         return {
             str(item.get("operationId")): OperationResult(str(item.get("operationId")), item.get("exit"),
                 str(item.get("stdoutHead", "")), str(item.get("stderrHead", "")),
                 bool(item.get("timedOut", False)), int(item.get("durationMs", 0)), item.get("writtenSha256"))
-            for item in tx.command_log
+            for item in tx.command_log if item.get("phase", "forward") == "forward"
         }
 
     def _rollback_record(self, tx: Transaction, reason: str) -> Transaction:
@@ -376,8 +391,8 @@ class Executor:
         results = self._results_from_log(tx)
         rollback_errors = list(tx.rollback_errors)
         skipped = list(tx.skipped_inverse_ids)
-        deferred_reloads: list[bool] = []
-        restored_hypr = False
+        deferred_reloads: list[tuple[Operation, str]] = []
+        restored_hypr_operation_id: str | None = None
         for operation_id in reversed(tx.completed_operation_ids):
             operation = operations.get(operation_id)
             if operation is None or operation.kind == "TimedConfirmation":
@@ -419,39 +434,63 @@ class Executor:
                             Path(details["previous"]) if details.get("previous") else None,
                             bool(details.get("installed")))
                 if replacement:
+                    inverse = inverses[0] if inverses else Operation(
+                        operation.id + ".inverse", operation.module_id, "ReplaceDirectoryAtomic", {},
+                        "Restore directory", (), (), 30)
+                    started = time.monotonic()
                     try:
                         replacement.undo()
-                        tx = self._save(tx, rolled_back_operation_ids=tx.rolled_back_operation_ids + (operation_id,))
+                        result = OperationResult(inverse.id, None, "", "", False,
+                                                 int((time.monotonic() - started) * 1000), None)
+                        tx = self._save(tx, command_log=tx.command_log +
+                                        (self._command_log_entry(inverse, result, "rollback", operation_id),),
+                                        rolled_back_operation_ids=tx.rolled_back_operation_ids + (operation_id,))
                     except Exception as error:
+                        result = self._failed_operation_result(inverse, error, started)
+                        tx = self._save(tx, command_log=tx.command_log +
+                                        (self._command_log_entry(inverse, result, "rollback", operation_id),))
                         rollback_errors.append({"code": "rollback_failed", "message": str(error),
                                                 "operationId": operation_id,
                                                 "affectedPaths": self._affected_paths(operation)})
                     continue
             for inverse in inverses:
                 if inverse.kind == "HyprctlReload":
-                    deferred_reloads.append(bool(inverse.params.get("config_only")))
+                    deferred_reloads.append((inverse, operation_id))
                     continue
+                started = time.monotonic()
                 try:
                     if inverse.kind == "RestoreBackup" and Path(inverse.params["path"]).is_relative_to(self.paths.home / ".config/hypr"):
-                        restored_hypr = True
-                    ops.run_forward(inverse, exec_ctx)
+                        restored_hypr_operation_id = operation_id
+                    result = ops.run_forward(inverse, exec_ctx)
                 except Exception as error:
+                    result = self._failed_operation_result(inverse, error, started)
                     rollback_errors.append({"code": getattr(error, "code", "rollback_failed"),
                                             "message": str(error), "operationId": operation_id,
                                             "affectedPaths": self._affected_paths(operation)})
+                tx = self._save(tx, command_log=tx.command_log +
+                                (self._command_log_entry(inverse, result, "rollback", operation_id),))
             tx = self._save(tx, rolled_back_operation_ids=tx.rolled_back_operation_ids + (operation_id,))
             try:
                 self.faults.hit(f"after_inverse:{operation_id}")
             except CcError as error:
                 rollback_errors.append({"code": error.code, "message": error.message, "operationId": operation_id,
                                         "affectedPaths": self._affected_paths(operation)})
-        if deferred_reloads or restored_hypr:
+        if deferred_reloads or restored_hypr_operation_id:
+            inverse, inverse_of = (deferred_reloads[-1] if deferred_reloads else
+                                    (Operation("hyprctl.reload", tx.module_id, "HyprctlReload", {},
+                                               "Reload Hyprland", (), (), 30), restored_hypr_operation_id))
+            inverse = replace(inverse, params={"config_only": bool(deferred_reloads) and
+                                                all(item.params.get("config_only") for item, _ in deferred_reloads)})
+            started = time.monotonic()
             try:
-                exec_ctx.hyprctl.reload(bool(deferred_reloads) and all(deferred_reloads))
+                result = ops.run_forward(inverse, exec_ctx)
             except Exception as error:
+                result = self._failed_operation_result(inverse, error, started)
                 rollback_errors.append({"code": getattr(error, "code", "rollback_failed"),
                                         "message": str(error), "operationId": "hyprctl.reload",
                                         "affectedPaths": []})
+            tx = self._save(tx, command_log=tx.command_log +
+                            (self._command_log_entry(inverse, result, "rollback", inverse_of),))
         tx = self._save(tx, rollback_errors=tuple(rollback_errors), skipped_inverse_ids=tuple(skipped))
         self._stop_gate(tx)
         if rollback_errors:
@@ -633,13 +672,7 @@ class Executor:
                 else:
                     result = ops.run_forward(operation, exec_ctx)
                 results[operation.id] = result
-                entry = {"operationId": operation.id, "argv": operation.params.get("argv", []),
-                         "exit": result.exit_code, "durationMs": result.duration_ms,
-                         "stdoutHead": redact(result.stdout_head)[:4096],
-                         "stderrHead": redact(result.stderr_head)[:4096], "timedOut": result.timed_out,
-                         "writtenSha256": result.written_sha256}
-                if operation.kind == "ReplaceDirectoryAtomic" and result.stdout_head:
-                    entry["directoryReplacement"] = json.loads(result.stdout_head)
+                entry = self._command_log_entry(operation, result, "forward")
                 tx = self._save(tx, completed_operation_ids=tx.completed_operation_ids + (operation.id,),
                                 command_log=tx.command_log + (entry,))
             after = self.registry.module(tx.module_id).status(self._ctx(tx.module_id, "read")).revision

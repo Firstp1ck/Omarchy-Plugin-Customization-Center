@@ -69,6 +69,34 @@ def test_stale_digest_and_confirmation_errors(isolated_home, stub_command):
     assert caught.value.code == "stale_revision"
 
 
+def test_before_verify_rollback_logs_every_executed_inverse(isolated_home, stub_command):
+    paths, executor, status, draft = _hello_setup(stub_command)
+    executor.faults.hooks.add("before_verify")
+    with pytest.raises(CcError) as caught:
+        executor.apply("hello", draft, status.revision)
+    assert caught.value.code == "internal_error"
+    tx = executor.journal.history(limit=1)[0]
+    forward_ids = {entry["operationId"] for entry in tx.command_log if entry["phase"] == "forward"}
+    rollback = [entry for entry in tx.command_log if entry["phase"] == "rollback"]
+    assert len(rollback) == 2
+    assert {entry["inverseOf"] for entry in rollback} == forward_ids
+
+
+def test_failing_inverse_logs_exit_and_rollback_error(isolated_home, stub_command):
+    def hello_command(request):
+        return {"exit_code": 7, "stderr": "undo failed"} if request["argv"][1:] == ["undo"] else {"exit_code": 0}
+    paths, executor, status, draft = _hello_setup(stub_command)
+    stub_command("hello-command", hello_command)
+    executor.faults.hooks.add("before_verify")
+    with pytest.raises(CcError) as caught:
+        executor.apply("hello", draft, status.revision)
+    assert caught.value.code == "rollback_failed"
+    tx = executor.journal.history(limit=1)[0]
+    failed = next(entry for entry in tx.command_log if entry.get("phase") == "rollback" and entry["exit"] == 7)
+    assert failed["inverseOf"] in {entry["operationId"] for entry in tx.command_log if entry["phase"] == "forward"}
+    assert any(error["operationId"] == failed["inverseOf"] for error in tx.rollback_errors)
+
+
 def test_missing_nonreversible_confirmation_lists_key(isolated_home):
     paths = Paths.from_env(); executor, _ = _executor(paths)
     operation = Operation("hello.0001", "hello", "TerminalHandoff",
@@ -132,10 +160,14 @@ def test_reconcile_passes_command_log_results(isolated_home):
     tx = Transaction(txid, "fake", "pending_handoff", now, now, plan, "before", None,
         (operation.id,), (), {}, None, None, (), (), command_log=({"operationId": operation.id,
         "argv": ["true"], "exit": 0, "durationMs": 1, "stdoutHead": "ok", "stderrHead": "",
-        "timedOut": False, "writtenSha256": "abc"},))
+        "timedOut": False, "writtenSha256": "abc", "phase": "forward"},
+        {"operationId": operation.id, "argv": ["false"], "exit": 7, "durationMs": 1,
+         "stdoutHead": "", "stderrHead": "failed", "timedOut": False, "writtenSha256": None,
+         "phase": "rollback", "inverseOf": operation.id}))
     executor.journal.create(tx)
     result = executor._reconcile_record(tx)
     assert result.state == "committed" and seen[0][operation.id].written_sha256 == "abc"
+    assert seen[0][operation.id].exit_code == 0
 
 
 def test_directory_replacement_survives_recovery(isolated_home):
