@@ -114,7 +114,7 @@ FocusScope {
             }
         }
         Flickable { Layout.fillWidth:true; Layout.fillHeight:true; visible:root.viewState==="editing"; clip:true; contentWidth:width; contentHeight:editor.implicitHeight
-            Modes.ModeEditor { id:editor; width:parent.width; mode:root.activeDraft.mode || root.newMode(); memberCapabilities:root.statusData.memberCapabilities || ({}); onModeChanged:mode=>root.updateMode(mode) }
+            Modes.ModeEditor { id:editor; width:parent.width; mode:root.activeDraft.mode || root.newMode(); memberCapabilities:root.statusData.memberCapabilities || ({}); onModeEdited:mode=>root.updateMode(mode) }
         }
         Modes.PlanReview { Layout.fillWidth:true; Layout.fillHeight:true; visible:root.viewState==="reviewing"; plan:root.plan; commands:[] }
         ColumnLayout { Layout.fillWidth:true; visible:root.viewState==="import-entry" || root.viewState==="import-error"
@@ -123,7 +123,7 @@ FocusScope {
             Text { visible:root.viewState==="import-error"; text:"Bundle JSON could not be parsed."; color:Color.urgent; font.family:Style.font.family }
             Ui.Button { text:"Stage for review"; enabled:root.importText.length>0; onClicked:root.stageImport() }
         }
-        Modes.ImportReview { Layout.fillWidth:true; visible:root.viewState==="importing"; review:root.importReview; commandsReviewed:root.activeDraft.import && root.activeDraft.import.resolutions ? root.activeDraft.import.resolutions.commandsReviewed === true : false; onReviewChanged:function(value){ var next=root.copy(root.activeDraft); if(!next.import.resolutions) next.import.resolutions=({}); next.import.resolutions.commandsReviewed=value; root.requestDraftPatch(next) } }
+        Modes.ImportReview { Layout.fillWidth:true; visible:root.viewState==="importing"; review:root.importReview; commandsReviewed:root.activeDraft.import && root.activeDraft.import.resolutions ? root.activeDraft.import.resolutions.commandsReviewed === true : false; onReviewEdited:function(value){ var next=root.copy(root.activeDraft); if(!next.import.resolutions) next.import.resolutions=({}); next.import.resolutions.commandsReviewed=value; root.requestDraftPatch(next) } }
         Modes.ShortcutSheet { Layout.fillWidth:true; visible:root.viewState==="shortcut"; command:root.shortcutCommand; onKeybindingRequested:root.requestNavigate("keybindings",{addBinding:{description:"Mode: "+root.selectedRow.mode.name,action:{type:"exec",command:root.shortcutCommand}}}); onMenuRequested:root.requestNavigate("menu",{addEntry:{parent:"modes",label:root.selectedRow.mode.name,action:root.shortcutCommand}}) }
         RowLayout { visible:["editing","reviewing","importing","shortcut","import-entry","import-error"].indexOf(root.viewState)>=0
             Ui.Button { text:"Back"; onClicked:root.viewState="ready" }

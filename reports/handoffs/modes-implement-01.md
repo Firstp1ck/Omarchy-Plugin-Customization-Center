@@ -76,6 +76,12 @@ Resolved validation setup incidents:
 - Actual member status/command compatibility remains dependent on the integrated commits represented by base `1bebe15`; contract stubs and full repository tests passed against those shapes.
 - Keybinding and menu shortcut payloads are staged through `requestNavigate`; applying them remains exclusively owned and reviewed by those member pages.
 
+## Integration-owner completion
+
+The parent registered `modes` after all seven member modules and fixed two QML signal names that collided with automatic property-change signals (`modeEdited` and `reviewEdited`). Modes tests, canonical contract checks, and the full repository suite pass with one expected runtime-only QML skip.
+
+Live Omarchy/Hyprland VM validation and final independent review remain open.
+
 ## Integration notes
 
 1. Cherry-pick the reported result commit.
