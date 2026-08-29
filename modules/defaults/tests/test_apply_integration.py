@@ -155,9 +155,9 @@ def test_unwrapped_handoff_cancellation_rolls_back_earlier_set(isolated_home, st
                                      registry=executor.registry, plugin_dir=ROOT), draft, status)
     with pytest.raises(CcError) as caught:
         executor.apply("defaults", draft, status.revision, confirmations=plan.requires_confirmation)
-    assert caught.value.code == "handoff_failed"
+    assert caught.value.code == "rollback_failed"
     tx = executor.journal.history(module="defaults", limit=1)[0]
-    assert tx.state == "rolled_back" and tx.reason == "handoff_failed"
+    assert tx.state == "rollback_failed" and tx.reason == "handoff_failed"
     assert state["browser"] == "chromium.desktop"
 
 

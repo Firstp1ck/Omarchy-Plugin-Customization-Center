@@ -37,6 +37,19 @@ def test_modes_contract_equivalent(tmp_path,monkeypatch):
     assert result.ok and result.normalized_draft is not None
     plan=module.plan(build_context("modes","plan",paths=paths,registry=registry.view,plugin_dir=ROOT),result.normalized_draft,status)
     for operation in plan.operations: validate_operation(operation,paths)
+
+    export_draft={**sample,"action":"export","export":{"outputName":"sample.json"}}
+    export_validation=module.validate(build_context("modes","validate",paths=paths,registry=registry.view,plugin_dir=ROOT),export_draft,status)
+    assert export_validation.ok and set(export_validation.normalized_draft["_planContext"])=={"exportedAt"}
+    first=module.plan(build_context("modes","plan",paths=paths,registry=registry.view,plugin_dir=ROOT),export_validation.normalized_draft,status)
+    second=module.plan(build_context("modes","plan",paths=paths,registry=registry.view,plugin_dir=ROOT),export_validation.normalized_draft,status)
+    assert first==second
+    document=json.loads(first.operations[-1].params["content"])
+    assert document["exportedAt"]==export_validation.normalized_draft["_planContext"]["exportedAt"]
+    for exported_at in (False,"not-an-iso-timestamp","2026-01-01T00:00:00"):
+        malformed={**export_validation.normalized_draft,"_planContext":{"exportedAt":exported_at}}
+        rejected=module.validate(build_context("modes","validate",paths=paths,registry=registry.view,plugin_dir=ROOT),malformed,status)
+        assert not rejected.ok and any(item.pointer=="/_planContext" for item in rejected.issues)
     stubs.close()
 
 def test_modes_imports_obey_contract():

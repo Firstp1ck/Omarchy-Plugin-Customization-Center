@@ -29,9 +29,11 @@ def test_pending_recovery_states(isolated_home):
     journal.create(transaction("applying"))
     expired = replace(transaction("expired", "awaiting_confirmation"), confirmation={"deadline": "2000-01-01T00:00:00Z"})
     journal.create(expired)
+    orphan = replace(transaction("orphan", "awaiting_confirmation"), confirmation={"deadline": "2099-01-01T00:00:00Z"})
+    journal.create(orphan)
     handoff = transaction("handoff", "pending_handoff"); journal.create(handoff)
     sentinel = paths.state / "handoffs/handoff.json"; sentinel.parent.mkdir(parents=True); sentinel.write_text("{}")
-    assert {item.id for item in journal.pending_recovery()} == {"applying", "expired", "handoff"}
+    assert {item.id for item in journal.pending_recovery()} == {"applying", "expired", "orphan", "handoff"}
 
 
 @pytest.mark.parametrize(("source", "target", "reason"), [
@@ -66,6 +68,16 @@ def test_illegal_transitions(isolated_home, source, target, reason):
     with pytest.raises(CcError) as caught:
         journal.transition("illegal", target, reason)
     assert caught.value.code == "transaction_state_invalid"
+
+
+def test_direct_save_enforces_state_machine(isolated_home):
+    journal = Journal(Paths.from_env())
+    original = transaction("direct", "committed")
+    journal.create(original)
+    with pytest.raises(CcError) as caught:
+        journal.save(replace(original, state="rolling_back", reason="user"))
+    assert caught.value.code == "transaction_state_invalid"
+    assert journal.load("direct").state == "committed"
 
 
 def test_save_fsync_order_includes_new_directory_parents(isolated_home, monkeypatch):

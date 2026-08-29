@@ -14,7 +14,11 @@ class Member:
     def status(self,ctx): return self._status
     def validate(self,ctx,draft,status): return ValidationResult(True,(),draft)
     def plan(self,ctx,draft,status):
-        if self.id=="monitors":
+        if self.id=="monitors" and draft.get("action")=="save-profile":
+            profile=draft["profile"]
+            record=Operation("monitors.0001","monitors","WriteFileAtomic",{"path":str(ctx.paths.module_config("monitors")/"monitor-profiles"/(profile["id"]+".json")),"content":__import__("json").dumps(profile),"mode":"0600"},"save profile",Operation("monitors.restore","monitors","RestoreBackup",{"path":str(ctx.paths.module_config("monitors")/"monitor-profiles"/(profile["id"]+".json"))},"undo",(),()),())
+            ops=(record,)
+        elif self.id=="monitors":
             first=Operation("monitors.0001","monitors","HyprctlReload",{"config_only":False},"reload",Operation("monitors.undo","monitors","HyprctlReload",{"config_only":False},"undo",(),()),())
             gate=Operation("monitors.0002","monitors","TimedConfirmation",{"seconds":30},"gate",Operation("monitors.gate","monitors","TimedConfirmation",{"seconds":30},"undo",(),()),())
             record=Operation("monitors.0003","monitors","WriteFileAtomic",{"path":"/tmp/record","content":"x","mode":"0600"},"record",Operation("monitors.restore","monitors","RestoreBackup",{"path":"/tmp/record"},"undo",(),()),())
@@ -26,12 +30,13 @@ class Member:
 class Registry:
     def __init__(self,values): self.values=values
     def module(self,name): return self.values[name]
+    def entry(self,name): return SimpleNamespace(metadata={"extraWritablePaths": []})
 class Ctx(SimpleNamespace):
-    def ctx_for(self,module_id,mode): return SimpleNamespace(module_id=module_id,cache=self.cache)
+    def ctx_for(self,module_id,mode): return SimpleNamespace(module_id=module_id,cache=self.cache,paths=self.paths)
 
 def statuses():
     return {
-      "monitors":Status("monitors","r-mon",{"profiles":[{"id":"desk","fit":{"state":"applicable"}}],"active":{"profileId":"desk","state":"verified"}},(),1),
+      "monitors":Status("monitors","r-mon",{"profiles":[{"id":"desk","profile":{"schemaVersion":1,"id":"desk"},"fit":{"state":"applicable"}}],"active":{"profileId":"desk","state":"verified"}},(),1),
       "themes":Status("themes","r-theme",{"themes":[{"slug":"night","wallpaperPaths":[]}],"active":{"slug":"night","background":None}},(),1),
       "plugins":Status("plugins","r-plug",{"rows":[{"id":"acme.service","kinds":["service"],"state":{"enabled":False,"canDisable":True}}]},(),1),
       "bar":Status("bar","r-bar",{"shell":{"available":True},"bar":{"id":None,"position":"top","transparent":False,"centerAnchor":"","extra":{},"layout":{"left":[],"center":[],"right":[]}}},(),1),
@@ -67,6 +72,54 @@ def test_claim_conflict_is_rejected_before_execution(modes_backend,tmp_path):
     compose=__import__("cc_modules.modes.compose",fromlist=["compose"]); ctx=context(tmp_path,True); status=Status("modes","r-modes",{},(),1)
     with pytest.raises(CcError) as caught: compose.compose_apply(ctx,mode(),status)
     assert caught.value.code=="resource_conflict"
+
+def test_import_plan_segments_are_an_exact_partition_accepted_by_executor(modes_backend,tmp_path):
+    ctx=context(tmp_path); status=Status("modes","r-modes",{"modes":[]},(),1)
+    imported={"bundleVersion":1,"mode":mode(),"artifacts":[],"externalReferences":[]}
+    draft={"schemaVersion":1,"action":"import","import":{"bundle":imported,"resolutions":{}}}
+    plan=modes_backend.MODULE.plan(ctx,draft,status)
+    local_segment=next(segment for segment in plan.segments if segment.module_id=="modes")
+    assert local_segment.operation_ids==tuple(operation.id for operation in plan.operations)
+    executor=Executor(tmp_path,ctx.registry,ctx.paths,tmp_path/"backend/ccctl")
+    executor._validate_plan(plan,())
+
+
+@pytest.mark.parametrize("action,new_id,expected_reference,expects_artifact_write", [
+    ("replace", None, "desk", True),
+    ("reuse", None, "desk", False),
+    ("rename", "projector", "projector", True),
+])
+def test_monitor_artifact_collision_resolution_keeps_or_rewrites_real_import_plan_reference(modes_backend,tmp_path,action,new_id,expected_reference,expects_artifact_write):
+    store=__import__("cc_modules.modes.store",fromlist=["store"]); ctx=context(tmp_path)
+    artifact_data={"schemaVersion":1,"id":"desk"}
+    ctx.registry.values["monitors"]._status.data["profiles"][0]["profile"]=artifact_data
+    imported_mode={"version":1,"id":"imported","name":"Imported","description":"","icon":"","members":{"monitors":{"profileId":"desk"}},"triggers":[]}
+    artifact={"module":"monitors","kind":"monitor-profile","id":"desk","digest":store.digest(artifact_data),"data":artifact_data}
+    bundle={"bundleVersion":1,"mode":imported_mode,"artifacts":[artifact],"externalReferences":[]}
+    resolution={"action":action}
+    if new_id is not None: resolution["id"]=new_id
+    draft={"schemaVersion":1,"action":"import","import":{"bundle":bundle,"resolutions":{"artifacts":{"monitor-profile:desk":resolution}}}}
+    status=Status("modes","r-modes",{"modes":[]},(),1)
+    plan=modes_backend.MODULE.plan(ctx,draft,status)
+    imported=__import__("json").loads(next(item.params["content"] for item in plan.operations if item.module_id=="modes" and item.kind=="WriteFileAtomic"))
+    assert imported["members"]["monitors"]["profileId"]==expected_reference
+    artifact_writes=[item for item in plan.operations if item.module_id=="monitors"]
+    assert bool(artifact_writes) is expects_artifact_write
+    if artifact_writes:
+        saved=__import__("json").loads(artifact_writes[0].params["content"])
+        assert saved["id"]==(new_id or "desk")
+
+
+def test_renamed_monitor_artifact_reference_is_revalidated(modes_backend,tmp_path):
+    store=__import__("cc_modules.modes.store",fromlist=["store"]); ctx=context(tmp_path)
+    artifact_data={"schemaVersion":1,"id":"desk"}
+    mode_value={"version":1,"id":"imported","name":"Imported","description":"","icon":"","members":{"monitors":{"profileId":"desk"}},"triggers":[]}
+    bundle={"bundleVersion":1,"mode":mode_value,"artifacts":[{"module":"monitors","kind":"monitor-profile","id":"desk","digest":store.digest(artifact_data),"data":artifact_data}],"externalReferences":[]}
+    draft={"schemaVersion":1,"action":"import","import":{"bundle":bundle,"resolutions":{"artifacts":{"monitor-profile:desk":{"action":"rename","id":"INVALID"}}}}}
+    with pytest.raises(CcError) as caught:
+        modes_backend.MODULE.plan(ctx,draft,Status("modes","r-modes",{"modes":[]},(),1))
+    assert caught.value.code=="modes_section_invalid"
+
 
 def test_nonreversible_and_import_runtime_plans_are_rejected(modes_backend):
     compose=__import__("cc_modules.modes.compose",fromlist=["compose"])

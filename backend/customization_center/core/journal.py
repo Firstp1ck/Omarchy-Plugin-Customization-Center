@@ -56,18 +56,34 @@ class Journal:
             raise CcError("schema_version_unsupported", f"Unsupported transaction schema: {data.get('schemaVersion')}")
         return Transaction.from_json(data)
 
+    @staticmethod
+    def validate_transition(txid: str, current_state: str, new_state: str,
+                            reason: str | None = None) -> None:
+        if current_state == new_state:
+            return
+        if new_state not in _TRANSITIONS.get(current_state, set()):
+            raise CcError("transaction_state_invalid", f"Cannot transition {current_state} to {new_state}",
+                          {"transactionId": txid, "state": current_state, "requestedState": new_state})
+        if current_state == "pending_handoff" and new_state == "rolled_back" and reason != "user":
+            raise CcError("transaction_state_invalid", "A pending handoff may be abandoned only by the user")
+
     def save(self, transaction: Transaction) -> None:
+        path = self.transactions / f"{transaction.id}.json"
+        if path.exists():
+            try:
+                current = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as error:
+                raise CcError("unsupported_config",
+                              f"Transaction journal is malformed: {transaction.id}") from error
+            self.validate_transition(transaction.id, str(current.get("state")), transaction.state,
+                                     transaction.reason)
         mkdir_durable(self.transactions, 0o700)
         payload = json.dumps(transaction.to_json(), sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode() + b"\n"
-        write_bytes_atomic(self.transactions / f"{transaction.id}.json", payload, 0o600)
+        write_bytes_atomic(path, payload, 0o600)
 
     def transition(self, txid: str, new_state: str, reason: str | None = None) -> Transaction:
         current = self.load(txid)
-        if new_state not in _TRANSITIONS.get(current.state, set()):
-            raise CcError("transaction_state_invalid", f"Cannot transition {current.state} to {new_state}",
-                          {"transactionId": txid, "state": current.state, "requestedState": new_state})
-        if current.state == "pending_handoff" and new_state == "rolled_back" and reason != "user":
-            raise CcError("transaction_state_invalid", "A pending handoff may be abandoned only by the user")
+        self.validate_transition(txid, current.state, new_state, reason)
         updated = replace(current, state=new_state, updated_at=self._now(), reason=reason or current.reason)
         self.save(updated)
         return updated
@@ -124,9 +140,9 @@ class Journal:
             if record.state in {"applying", "rolling_back"}:
                 pending.append(record)
             elif record.state == "awaiting_confirmation":
-                deadline = (record.confirmation or {}).get("deadline")
-                if deadline and _parse_time(deadline) <= now:
-                    pending.append(record)
+                # Lock ownership, not the deadline alone, distinguishes a live gate from an orphan.
+                # Recovery attempts the global lock and leaves live owners untouched.
+                pending.append(record)
             elif record.state == "pending_handoff" and (self.state / "handoffs" / f"{record.id}.json").is_file():
                 pending.append(record)
         return pending

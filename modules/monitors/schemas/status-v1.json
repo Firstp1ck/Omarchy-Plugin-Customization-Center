@@ -6,6 +6,7 @@
   "required": [
     "schemaVersion",
     "inventory",
+    "cachedModes",
     "profiles",
     "active",
     "loader",
@@ -20,6 +21,22 @@
     },
     "inventory": {
       "type": "object"
+    },
+    "cachedModes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["profileId", "outputId", "identity", "modes", "observedAt", "stale"],
+        "properties": {
+          "profileId": {"type": "string"},
+          "outputId": {"type": "string"},
+          "identity": {"type": "object"},
+          "modes": {"type": "array"},
+          "observedAt": {"type": "string"},
+          "stale": {"const": true}
+        }
+      }
     },
     "profiles": {
       "type": "array"

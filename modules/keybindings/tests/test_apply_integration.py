@@ -63,7 +63,7 @@ def apply_once(tmp_path, monkeypatch, fault_hook=None):
     paths = Paths.from_env(); registry = load_registry(ROOT, paths=paths); module = registry.view.module("keybindings")
     status = module.status(build_context("keybindings", "read", paths=paths, registry=registry.view, plugin_dir=ROOT))
     if fault_hook:
-        fault_file = paths.home / "faults.json"; fault_file.write_text(json.dumps({"hooks": [fault_hook]}))
+        fault_file = paths.private_tmpfile("-faults.json"); fault_file.write_text(json.dumps({"hooks": [fault_hook]}))
         monkeypatch.setenv("CC_TEST_FAULTS", str(fault_file))
     executor = Executor(ROOT, registry, paths, ROOT / "backend/ccctl")
     return bindings, paths, status, executor

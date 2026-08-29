@@ -38,6 +38,25 @@ TestCase {
     }
     SignalSpy { id: patchSpy; signalName: "requestDraftPatch" }
 
+    function test_cached_modes_are_marked_stale_for_disconnected_profile_output() {
+        var disconnected = JSON.parse(JSON.stringify(statusValue))
+        disconnected.inventory.outputs = [disconnected.inventory.outputs[0]]
+        disconnected.cachedModes = [{ profileId: "desk", outputId: "second", stale: true, observedAt: "2026-01-01T00:00:00Z",
+            identity: { connector: "DP-2", description: "Second Panel", make: "Acme", model: "Panel", serial: "2" },
+            modes: [{ width: 1920, height: 1080, refreshMilliHz: 60000 }] }]
+        var page = createTemporaryObject(pageComponent, this, { status: disconnected })
+        verify(page !== null)
+        tryCompare(page, "viewReady", true)
+        var canvas = findChild(page, "layoutCanvas")
+        verify(canvas !== null)
+        canvas.selected("second")
+        wait(0)
+        var picker = findChild(page, "modePicker")
+        verify(picker !== null)
+        compare(picker.stale, true)
+        verify(findChild(page, "mode-1920x1080-60000") !== null)
+    }
+
     function test_view_ready_and_nested_patch() {
         var page = createTemporaryObject(pageComponent, this)
         verify(page !== null)

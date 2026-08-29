@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Omarchy Customization Center implementation report</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1220;
+      --panel: #121c2d;
+      --panel-2: #18253a;
+      --text: #e8eef8;
+      --muted: #a9b7cb;
+      --line: #2b3b55;
+      --green: #50d890;
+      --yellow: #f7c65c;
+      --red: #ff7373;
+      --blue: #65b5ff;
+      --code: #07101c;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --shadow: 0 14px 36px rgb(0 0 0 / 22%);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 15% 0%, #142848 0, transparent 35rem), var(--bg);
+      color: var(--text);
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    a { color: var(--blue); }
+    a:focus-visible, button:focus-visible, summary:focus-visible {
+      outline: 3px solid var(--blue);
+      outline-offset: 3px;
+    }
+    .skip-link {
+      position: fixed;
+      z-index: 20;
+      top: 8px;
+      left: 8px;
+      transform: translateY(-160%);
+      background: var(--blue);
+      color: #06111f;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-weight: 800;
+    }
+    .skip-link:focus { transform: none; }
+    main { width: min(1120px, calc(100% - 32px)); margin: 36px auto 64px; }
+    header, .report-section {
+      background: color-mix(in srgb, var(--panel) 94%, transparent);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow);
+    }
+    header { padding: 30px; margin-bottom: 20px; }
+    .report-section { padding: 24px; margin: 18px 0; }
+    h1, h2, h3 { line-height: 1.25; margin-top: 0; }
+    h1 { font-size: clamp(1.9rem, 5vw, 3rem); margin-bottom: 8px; letter-spacing: -.025em; }
+    h2 { font-size: 1.45rem; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+    h3 { font-size: 1.08rem; margin-bottom: 6px; }
+    p { margin: 8px 0 14px; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    code { background: var(--code); padding: .12em .38em; border-radius: 5px; }
+    pre {
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      overflow-x: auto;
+      color: #d9e6f7;
+      white-space: pre-wrap;
+    }
+    .muted { color: var(--muted); }
+    .lead { font-size: 1.1rem; max-width: 82ch; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+    .metric, .finding, .step {
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 16px;
+    }
+    .metric strong { display: block; font-size: 1.35rem; }
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: .78rem;
+      font-weight: 750;
+      letter-spacing: .035em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .good { color: var(--green); }
+    .warn { color: var(--yellow); }
+    .bad { color: var(--red); }
+    .info { color: var(--blue); }
+    .badge.good { background: rgb(80 216 144 / 14%); border: 1px solid rgb(80 216 144 / 38%); }
+    .badge.warn { background: rgb(247 198 92 / 14%); border: 1px solid rgb(247 198 92 / 38%); }
+    .badge.bad { background: rgb(255 115 115 / 14%); border: 1px solid rgb(255 115 115 / 38%); }
+    .badge.info { background: rgb(101 181 255 / 14%); border: 1px solid rgb(101 181 255 / 38%); }
+    .callout {
+      border-left: 5px solid var(--yellow);
+      background: rgb(247 198 92 / 8%);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 14px 0;
+    }
+    .callout.good-callout { border-left-color: var(--green); background: rgb(80 216 144 / 8%); }
+    .callout.info-callout { border-left-color: var(--blue); background: rgb(101 181 255 / 8%); }
+    .table-wrap { overflow-x: auto; border-radius: 10px; }
+    table { width: 100%; border-collapse: collapse; min-width: 680px; }
+    th, td { text-align: left; vertical-align: top; padding: 11px 9px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-size: .86rem; text-transform: uppercase; letter-spacing: .04em; }
+    tbody tr:hover { background: rgb(101 181 255 / 5%); }
+    .tabs-shell { margin-top: 18px; }
+    [role="tablist"] {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 8px;
+      margin: 0 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgb(7 16 28 / 72%);
+    }
+    [role="tab"] {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      padding: 9px 13px;
+      white-space: nowrap;
+      font: inherit;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    [role="tab"][aria-selected="true"] {
+      color: var(--text);
+      border-color: rgb(101 181 255 / 45%);
+      background: rgb(101 181 255 / 14%);
+    }
+    .tabs-ready [role="tabpanel"][hidden] { display: none; }
+    .report-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .action-button {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 8px 12px;
+      min-height: 42px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .action-button:hover { border-color: var(--blue); }
+    figure { margin: 18px 0; }
+    figure svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: var(--code);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    figcaption { color: var(--muted); margin-top: 8px; font-size: .92rem; }
+    .node { fill: #182b43; stroke: var(--blue); stroke-width: 2; }
+    .node.safe { stroke: var(--green); }
+    .node.stop { stroke: var(--yellow); }
+    .node-text { fill: var(--text); font: 650 15px system-ui, sans-serif; text-anchor: middle; }
+    .edge { fill: none; stroke: var(--muted); stroke-width: 2.5; marker-end: url(#arrow); }
+    .edge.stop { stroke: var(--yellow); stroke-dasharray: 7 6; }
+    details { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+    summary { cursor: pointer; color: var(--blue); font-weight: 700; }
+    ol.steps { list-style: none; padding: 0; counter-reset: steps; }
+    ol.steps > li { counter-increment: steps; margin: 14px 0; }
+    ol.steps > li::before {
+      content: counter(steps);
+      float: left;
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      margin: 1px 12px 0 0;
+      border-radius: 50%;
+      background: var(--blue);
+      color: #06111f;
+      font-weight: 800;
+    }
+    .step { overflow: hidden; }
+    footer { color: var(--muted); margin-top: 24px; font-size: .9rem; }
+    @media (max-width: 620px) {
+      main { width: min(100% - 18px, 1120px); margin-top: 10px; }
+      header, .report-section { padding: 18px; }
+      [role="tablist"] { position: sticky; top: 0; z-index: 5; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      body { background: white; color: #111; }
+      main { width: 100%; margin: 0; }
+      header, .report-section, .metric, .finding, .step {
+        box-shadow: none;
+        background: white;
+        color: #111;
+        border-color: #bbb;
+        break-inside: avoid;
+      }
+      [role="tablist"], .skip-link, .report-tools { display: none !important; }
+      [role="tabpanel"], [role="tabpanel"][hidden] { display: block !important; }
+      pre, code, figure svg { color: #111; background: #f1f3f5; border-color: #bbb; }
+      .muted, figcaption, footer { color: #444; }
+      a { color: #111; text-decoration: underline; }
+      figure { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+<a class="skip-link" href="#report-content">Skip to report content</a>
+<main id="report-content">
+  <header>
+    <span class="badge info">Implementation report</span>
+    <h1>Omarchy Customization Center</h1>
+    <p class="lead">This report records the cumulative hardening work against base commit <code>cd80826d2f9cf7575a41dbe411bddcf0da58a782</code>. It covers the transaction core, all eight modules, the test harness, independent source review, and the release checks that still require a live Omarchy environment.</p>
+    <div class="callout good-callout">
+      <strong>Conclusion.</strong> Source implementation and isolated acceptance pass. The repository is not yet eligible for a full release claim because live Quickshell/Hyprland, VM, and manual TTY recovery checks were unavailable.
+    </div>
+    <p class="muted"><strong>Confidence:</strong> 96/100 for source acceptance. Confidence is lower for runtime behavior because the graphical and VM matrices have not run.</p>
+    <div class="report-tools" aria-label="Report actions">
+      <button class="action-button" type="button" data-action="print">Print report</button>
+      <button class="action-button" type="button" data-action="copy-link">Copy current link</button>
+    </div>
+  </header>
+
+  <div class="tabs-shell">
+    <nav role="tablist" aria-label="Report sections">
+      <button id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0">Overview</button>
+      <button id="tab-implementation" role="tab" aria-selected="false" aria-controls="panel-implementation" tabindex="-1">Implementation</button>
+      <button id="tab-verification" role="tab" aria-selected="false" aria-controls="panel-verification" tabindex="-1">Verification</button>
+      <button id="tab-release" role="tab" aria-selected="false" aria-controls="panel-release" tabindex="-1">Release status</button>
+      <button id="tab-evidence" role="tab" aria-selected="false" aria-controls="panel-evidence" tabindex="-1">Evidence</button>
+    </nav>
+
+    <section class="report-section" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+      <h2>Overview</h2>
+      <div class="grid" aria-label="Headline results">
+        <div class="metric"><span class="badge good">Passed</span><strong>511 tests</strong><span class="muted">Canonical suite, plus one expected runtime skip</span></div>
+        <div class="metric"><span class="badge good">Integrated</span><strong>8 modules</strong><span class="muted">One registry and one transaction core</span></div>
+        <div class="metric"><span class="badge warn">Pending</span><strong>3 runtime gates</strong><span class="muted">Live desktop, VM matrix, and TTY recovery drill</span></div>
+      </div>
+      <h3 style="margin-top:22px">Report map</h3>
+      <div class="table-wrap">
+        <table data-overview>
+          <thead><tr><th>Area</th><th>Delivered result</th><th>Evidence</th><th>Disposition</th></tr></thead>
+          <tbody>
+            <tr><td>Transaction core</td><td>Durable in-flight state, exact reconciliation, resumable rollback, and fail-closed ambiguity handling</td><td>Core, fault, journal, operation, and schema suites</td><td><span class="good">Source accepted</span></td></tr>
+            <tr><td>Module integration</td><td>All eight modules follow the shared protocol and compose through one executor</td><td>Per-module tests and generic contract suite</td><td><span class="good">Source accepted</span></td></tr>
+            <tr><td>Reviewed plans</td><td>Normalized drafts retain bounded plan-time context and produce the same apply digest</td><td>Monitor, modes, themes, and QML regressions</td><td><span class="good">Source accepted</span></td></tr>
+            <tr><td>Release validation</td><td>Canonical pytest, diff, staging, cache, and bytecode checks pass</td><td>Parent and worker command runs</td><td><span class="good">Passed</span></td></tr>
+            <tr><td>Runtime acceptance</td><td>Quickshell, Hyprland, VM, and manual TTY paths remain unexecuted</td><td>Environment-dependent QML skip and unavailable runtime</td><td><span class="warn">Release gate</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="report-section" id="panel-implementation" role="tabpanel" aria-labelledby="tab-implementation">
+      <h2>What changed</h2>
+      <div class="grid">
+        <article class="finding">
+          <span class="badge good">Core</span>
+          <h3>Crash recovery now uses durable evidence</h3>
+          <p>The journal records the operation in flight, inverse progress, and inverse ordering. Recovery reconciles local filesystem effects only when exact evidence proves the result. Commands, IPC, reloads, and handoffs remain ambiguous after a crash and are never rerun by guesswork.</p>
+        </article>
+        <article class="finding">
+          <span class="badge good">Rollback</span>
+          <h3>Directory undo is conflict-safe</h3>
+          <p>Directory replacement rollback binds the staged pre-image, observed installed image, raw forward result, original target image, and generated previous-directory identity. Missing, changed, malformed, or contradictory evidence preserves every candidate and records <code>rollback_conflict</code>.</p>
+        </article>
+        <article class="finding">
+          <span class="badge good">Plans</span>
+          <h3>Review and apply use the same draft</h3>
+          <p>Monitor activation, mode export, and theme save generate volatile timestamps during validation and keep them in the normalized draft. <code>ApplyBar.qml</code> applies that exact draft. A failed re-review clears the old plan instead of leaving a stale Apply target enabled.</p>
+        </article>
+        <article class="finding">
+          <span class="badge good">Integration</span>
+          <h3>Module-specific edge cases are bounded</h3>
+          <p>Monitor caches remain display-only. Plugin handoffs keep fallback polling. Mode import rewrites renamed monitor profile references. Generic pytest collection includes root tests and every registered module suite without failing on missing optional directories.</p>
+        </article>
+      </div>
+
+      <h3 style="margin-top:22px">Eight-module delivery</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Module</th><th>Ownership</th><th>Hardening outcome</th></tr></thead>
+          <tbody>
+            <tr><td>Bar</td><td>Visual shell bar configuration</td><td>Reviewed file and IPC routes remain inside the shared executor.</td></tr>
+            <tr><td>Plugins</td><td>Plugin settings and lifecycle handoffs</td><td>Sentinel reconciliation, abandon, refresh, and registry fallback polling are retained.</td></tr>
+            <tr><td>Menu</td><td>Personal menu entries</td><td>Contract and apply coverage run in the canonical suite.</td></tr>
+            <tr><td>Defaults</td><td>Default applications</td><td>Handoff and selector failures roll back or fail closed.</td></tr>
+            <tr><td>Monitors</td><td>Hyprland layout profiles</td><td>Stale mode data is display-only; activation context and confirmation timing are bounded.</td></tr>
+            <tr><td>Themes</td><td>Theme generation and activation</td><td>Save timestamps are deterministic and directory swaps use exact rollback evidence.</td></tr>
+            <tr><td>Keybindings</td><td>Managed Hyprland bindings</td><td>Apply and fault paths use the same core safety rules.</td></tr>
+            <tr><td>Modes</td><td>Cross-module desktop modes</td><td>Segments partition every operation exactly; exports are deterministic and profile renames propagate.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure data-visual-kind="diagram" data-purpose="Explain the evidence-gated transaction and recovery path">
+        <svg role="img" aria-labelledby="flow-title flow-desc" viewBox="0 0 980 360">
+          <title id="flow-title">Evidence-gated transaction flow</title>
+          <desc id="flow-desc">A reviewed normalized draft creates a digest-bound plan. The executor records intent before each effect. Exact evidence commits or rolls back safely. Ambiguous evidence stops and requires recovery.</desc>
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#a9b7cb"/></marker>
+          </defs>
+          <path class="edge" d="M210 90 H285"/>
+          <path class="edge" d="M435 90 H510"/>
+          <path class="edge" d="M660 90 H735"/>
+          <path class="edge" d="M810 128 C810 210 700 240 635 240"/>
+          <path class="edge" d="M560 278 H430"/>
+          <path class="edge stop" d="M585 128 V190"/>
+          <rect class="node" x="35" y="52" width="175" height="76" rx="12"/>
+          <text class="node-text" x="122" y="84">Validate and</text><text class="node-text" x="122" y="105">normalize draft</text>
+          <rect class="node" x="285" y="52" width="150" height="76" rx="12"/>
+          <text class="node-text" x="360" y="84">Digest-bound</text><text class="node-text" x="360" y="105">plan</text>
+          <rect class="node" x="510" y="52" width="150" height="76" rx="12"/>
+          <text class="node-text" x="585" y="84">Persist intent,</text><text class="node-text" x="585" y="105">then effect</text>
+          <rect class="node safe" x="735" y="52" width="210" height="76" rx="12"/>
+          <text class="node-text" x="840" y="84">Verify exact result</text><text class="node-text" x="840" y="105">and commit</text>
+          <rect class="node safe" x="560" y="202" width="150" height="76" rx="12"/>
+          <text class="node-text" x="635" y="234">Exact inverse</text><text class="node-text" x="635" y="255">and rollback</text>
+          <rect class="node stop" x="250" y="202" width="180" height="76" rx="12"/>
+          <text class="node-text" x="340" y="234">Ambiguous evidence</text><text class="node-text" x="340" y="255">stop and recover</text>
+          <text class="node-text" x="618" y="177">failure</text>
+        </svg>
+        <figcaption>The executor writes intent before an effect. It resumes only when durable evidence proves the exact outcome. Otherwise it preserves state and blocks further apply work.</figcaption>
+      </figure>
+    </section>
+
+    <section class="report-section" id="panel-verification" role="tabpanel" aria-labelledby="tab-verification">
+      <h2>Verification</h2>
+      <div class="callout good-callout"><strong>Canonical result.</strong> 511 tests passed. One QML test skipped because the required Quickshell/Hyprland runtime is not present.</div>
+      <pre><code>PYTHONPATH="$PWD" PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider</code></pre>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Check</th><th>Result</th><th>What it covers</th></tr></thead>
+          <tbody>
+            <tr><td>Canonical pytest suite</td><td><span class="good">511 passed, 1 skipped</span></td><td>Core, contracts, QML harness, and all eight module suites</td></tr>
+            <tr><td>Focused recovery suites</td><td><span class="good">Passed</span></td><td>Fault hooks, in-flight reconciliation, inverse progress, managed blocks, directory swaps, and schema compatibility</td></tr>
+            <tr><td><code>git diff --check</code></td><td><span class="good">Passed</span></td><td>Whitespace and conflict-marker hygiene</td></tr>
+            <tr><td>Staged files</td><td><span class="good">None</span></td><td>Preserves parent integration ownership</td></tr>
+            <tr><td>Bytecode and pytest caches</td><td><span class="good">None</span></td><td>Avoids plugin hot reload and repository noise</td></tr>
+            <tr><td>Fresh core review</td><td><span class="good">Approved, 94/100</span></td><td>Recovery, schema compatibility, confirmation, and exact directory rollback evidence</td></tr>
+            <tr><td>Fresh module review</td><td><span class="good">Approved, 87/100</span></td><td>Eight-module contracts, QML flow, composition, cache boundaries, and reviewed plan context</td></tr>
+            <tr><td>Fresh release review</td><td><span class="good">Approved, 88/100</span></td><td>Harness, plan lifecycle, recovery guide, HTML report, and truthful runtime omissions</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <details>
+        <summary>Important regression cases</summary>
+        <ul>
+          <li>Recovery never repeats ambiguous commands, shell IPC, reloads, or handoffs.</li>
+          <li>Completed inverses are not rerun after another crash.</li>
+          <li>Managed blocks require the exact expected post-image, including legacy fail-closed behavior.</li>
+          <li>Directory undo rejects a changed current target, changed previous directory, alternate clone sibling, contradictory install state, malformed raw result, and incomplete legacy evidence.</li>
+          <li>Monitor plans reject stale plan contexts and reuse the reviewed context without digest drift.</li>
+          <li>A failed second review clears the old Apply target.</li>
+        </ul>
+      </details>
+    </section>
+
+    <section class="report-section" id="panel-release" role="tabpanel" aria-labelledby="tab-release">
+      <h2>Release status</h2>
+      <p>The current tree is a source-accepted release candidate, not a fully accepted release. The missing work depends on an environment that can run the real shell and compositor.</p>
+      <ol class="steps">
+        <li class="step">
+          <h3>Run live desktop checks</h3>
+          <p>Open and close the overlay through shell IPC. Exercise dark and light themes, bar positions, monitor layouts, confirmation recovery, shell restart, and plugin handoff refresh on a development desktop.</p>
+          <p class="muted"><strong>Done when:</strong> each visible state and recovery path matches the master plan without a persistent side effect outside the reviewed plan.</p>
+        </li>
+        <li class="step">
+          <h3>Run the Omarchy VM matrix</h3>
+          <p>Use <code>omarchy-iso-test</code> and the acceptance environment named in the master plan. Include killed overlay and killed <code>ccctl</code> cases during a monitor apply.</p>
+          <p class="muted"><strong>Done when:</strong> the VM acceptance suite passes and the results are attached to the release record.</p>
+        </li>
+        <li class="step">
+          <h3>Execute the recovery guide from a TTY</h3>
+          <p>Walk every <code>rollback_failed</code> fixture and the overlay-will-not-open case using <code>docs/recovery.md</code>.</p>
+          <p class="muted"><strong>Done when:</strong> every recovery command is confirmed against a real user session and the guide needs no correction.</p>
+        </li>
+      </ol>
+      <div class="callout"><strong>Plan lifecycle.</strong> Keep <code>plans/planned/customization-center-masterplan.md</code> in place. Move it to <code>plans/archive/</code> only after the three runtime gates pass.</div>
+    </section>
+
+    <section class="report-section" id="panel-evidence" role="tabpanel" aria-labelledby="tab-evidence">
+      <h2>Evidence, limits, and residual risk</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Evidence source</th><th>Use in this report</th><th>Limit</th></tr></thead>
+          <tbody>
+            <tr><td><code>plans/planned/customization-center-masterplan.md</code></td><td>Architecture, acceptance gates, safety decisions, and release boundaries</td><td>The live and VM rows remain unexecuted.</td></tr>
+            <tr><td><code>backend/customization_center/core/</code></td><td>Transaction, operation, journal, atomic, path, registry, and type behavior</td><td>Source review cannot reproduce compositor or shell failures.</td></tr>
+            <tr><td><code>modules/*/tests</code> and <code>tests/</code></td><td>Contract, module, fault, recovery, QML, and harness evidence</td><td>One environment-dependent QML path skipped.</td></tr>
+            <tr><td>Independent review runs</td><td>Three provider-distinct final approvals for core, module integration, and release truthfulness</td><td>Reviewers inspected source but relied on the parent's command evidence.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3 style="margin-top:22px">Accepted residuals</h3>
+      <ul>
+        <li>A cross-filesystem rename-gap crash may leave one exact incoming sibling directory. Cleanup remains manual rather than broadening automatic deletion.</li>
+        <li>Legacy directory replacement records without complete post-image evidence stop in <code>rollback_failed</code> and require manual recovery.</li>
+        <li>Journal evidence is not cryptographically authenticated. Coordinated journal tampering is outside the local trusted-user threat model.</li>
+        <li>Serialized command output is capped. Truncated directory evidence fails closed and may require manual recovery.</li>
+      </ul>
+      <div class="callout info-callout"><strong>Scope boundary.</strong> No commit, package publication, push, or live desktop mutation is part of this report. The cumulative working tree remains under the parent integration owner's control.</div>
+      <details>
+        <summary>Primary changed paths</summary>
+        <p><code>backend/ccctl</code>, <code>backend/customization_center/core/</code>, <code>core/ApplyBar.qml</code>, <code>core/ModuleRegistry.qml</code>, <code>core/TransactionModel.qml</code>, module backends and tests under <code>modules/</code>, <code>pytest.ini</code>, <code>schemas/transaction-v1.json</code>, and the core, contract, and QML test suites.</p>
+      </details>
+    </section>
+  </div>
+
+  <footer>
+    <p><strong>Scope:</strong> cumulative source implementation and acceptance record, generated 2026-08-29. Base commit <code>cd80826d2f9cf7575a41dbe411bddcf0da58a782</code>.</p>
+  </footer>
+</main>
+<script>
+(() => {
+  const tablist = document.querySelector('[role="tablist"]');
+  if (!tablist) return;
+  const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+  document.documentElement.classList.add('tabs-ready');
+  function activate(tab, focus = false) {
+    tabs.forEach((candidate) => {
+      const selected = candidate === tab;
+      candidate.setAttribute('aria-selected', String(selected));
+      candidate.tabIndex = selected ? 0 : -1;
+      const panel = document.getElementById(candidate.getAttribute('aria-controls'));
+      if (panel) panel.hidden = !selected;
+    });
+    history.replaceState(null, '', `#${tab.getAttribute('aria-controls')}`);
+    if (focus) tab.focus();
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => activate(tab));
+    tab.addEventListener('keydown', (event) => {
+      let next = null;
+      if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+      if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+      if (event.key === 'Home') next = 0;
+      if (event.key === 'End') next = tabs.length - 1;
+      if (next === null) return;
+      event.preventDefault();
+      activate(tabs[next], true);
+    });
+  });
+  document.querySelector('[data-action="print"]')?.addEventListener('click', () => window.print());
+  document.querySelector('[data-action="copy-link"]')?.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(window.location.href); }
+    catch { window.prompt('Copy this report link', window.location.href); }
+  });
+  const hashPanel = document.querySelector(location.hash && location.hash.startsWith('#panel-') ? location.hash : '#panel-overview');
+  const initial = hashPanel ? tabs.find((tab) => tab.getAttribute('aria-controls') === hashPanel.id) : tabs[0];
+  activate(initial || tabs[0]);
+})();
+</script>
+</body>
+</html>

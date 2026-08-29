@@ -46,8 +46,13 @@ def test_managed_block_insert_replace_remove_inverse_and_collisions(isolated_hom
     target.parent.mkdir(parents=True); target.write_text("outside\n")
     operation = ops.ReplaceManagedBlock(ctx, target, "TEST", 1, "one")
     exec_ctx = _exec(paths); exec_ctx.backups.take(exec_ctx.txid, [target])
-    result = ops.run_forward(operation, exec_ctx); assert "one" in target.read_text()
-    _run_inverses(operation, result, exec_ctx); assert target.read_text() == "outside\n"
+    expected = ops.managed_block_post_image(operation, exec_ctx)
+    result = ops.run_forward(operation, exec_ctx)
+    assert target.read_bytes() == expected and "one" in target.read_text()
+    inverse = ops.build_inverse(operation, exec_ctx, result)[0]
+    expected_inverse = ops.managed_block_post_image(inverse, exec_ctx)
+    ops.run_forward(inverse, exec_ctx)
+    assert target.read_bytes() == expected_inverse == b"outside\n"
     for content in ("-- BEGIN OMARCHY CUSTOMIZATION CENTER TEST v1\n",
                     "-- END OMARCHY CUSTOMIZATION CENTER TEST v1\n",
                     "-- END OMARCHY CUSTOMIZATION CENTER TEST v1\n-- BEGIN OMARCHY CUSTOMIZATION CENTER TEST v1\n",
@@ -57,12 +62,47 @@ def test_managed_block_insert_replace_remove_inverse_and_collisions(isolated_hom
         assert caught.value.code == "unsupported_config"
 
 
+def test_raw_managed_block_post_image_and_backup_inverse(isolated_home):
+    paths = Paths.from_env(); ctx = _ctx(paths); target = paths.module_config("sample") / "raw.conf"
+    target.parent.mkdir(parents=True)
+    original = b"head\n# begin\nold\n# end\ntail\n"
+    target.write_bytes(original)
+    operation = ops.ReplaceManagedBlock(ctx, target, body="new", begin_marker="# begin", end_marker="# end")
+    exec_ctx = _exec(paths, "raw"); exec_ctx.backups.take(exec_ctx.txid, [target])
+
+    expected = ops.managed_block_post_image(operation, exec_ctx)
+    result = ops.run_forward(operation, exec_ctx)
+    assert target.read_bytes() == expected
+    inverse = ops.build_inverse(operation, exec_ctx, result)[0]
+    assert inverse.params["body_from_backup"] is True
+    expected_inverse = ops.managed_block_post_image(inverse, exec_ctx)
+    ops.run_forward(inverse, exec_ctx)
+    assert target.read_bytes() == expected_inverse == original
+
+
 def test_ensure_directory_forward_inverse_created_and_existing(isolated_home):
     paths = Paths.from_env(); ctx = _ctx(paths); leaf = paths.module_config("sample") / "leaf"; exec_ctx = _exec(paths)
-    operation = ops.EnsureDirectory(ctx, leaf); result = ops.run_forward(operation, exec_ctx)
+    operation = ops.EnsureDirectory(ctx, leaf, "0700"); result = ops.run_forward(operation, exec_ctx)
+    assert json.loads(result.stdout_head) == {"created": True, "previousMode": None, "requestedMode": "0700"}
     _run_inverses(operation, result, exec_ctx); assert not leaf.exists()
-    leaf.mkdir(); operation = ops.EnsureDirectory(ctx, leaf); result = ops.run_forward(operation, exec_ctx)
-    _run_inverses(operation, result, exec_ctx); assert leaf.exists()
+
+    leaf.mkdir(mode=0o755); operation = ops.EnsureDirectory(ctx, leaf, "0700")
+    result = ops.run_forward(operation, exec_ctx)
+    assert leaf.stat().st_mode & 0o777 == 0o700
+    assert json.loads(result.stdout_head) == {"created": False, "previousMode": "0755", "requestedMode": "0700"}
+    inverses = ops.build_inverse(operation, exec_ctx, result)
+    assert inverses[0].params["restore_mode"] == "0755"
+    ops.run_forward(inverses[0], exec_ctx)
+    assert leaf.stat().st_mode & 0o777 == 0o755
+
+
+def test_ensure_directory_rejects_existing_non_directory(isolated_home):
+    paths = Paths.from_env(); ctx = _ctx(paths); target = paths.module_config("sample") / "not-directory"
+    target.parent.mkdir(parents=True); target.write_text("keep")
+    with pytest.raises(CcError) as caught:
+        ops.run_forward(ops.EnsureDirectory(ctx, target, "0700"), _exec(paths))
+    assert caught.value.code == "unsupported_config"
+    assert target.read_text() == "keep"
 
 
 def test_every_builder_produces_frozen_operations(isolated_home):

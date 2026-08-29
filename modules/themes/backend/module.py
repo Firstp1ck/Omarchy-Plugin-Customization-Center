@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,16 @@ _TEMPLATE_OUTPUTS = {
     "gum_env.lua", "helix.toml", "hyprland.lua", "hyprland-preview-share-picker.css", "kitty.conf",
     "neovim.lua", "obsidian.css", "pi.json", "shell.toml", "vscode-theme.json", "vscode.json",
 }
+
+
+def _valid_iso_timestamp(value: Any) -> bool:
+    if not isinstance(value, str) or not 1 <= len(value) <= 64:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
 
 
 def _read_bytes(path: Path) -> bytes | None:
@@ -319,6 +330,20 @@ class ThemesModule:
                 if not wallpapers:
                     issues.append(ValidationIssue("themes_no_wallpaper", "A preview.png will be generated; activation keeps the previous wallpaper", "/wallpapers", "warning"))
                 normalized["acceptedWarnings"] = sorted(accepted)
+        needs_save_context = (kind == "compose" and draft.get("delete") is not True and
+                              draft.get("tryInShell") is not True)
+        if needs_save_context:
+            plan_context = draft.get("_planContext")
+            if plan_context is None:
+                plan_context = {"savedAt": ctx.clock.now_iso()}
+            valid_context = (isinstance(plan_context, dict) and set(plan_context) == {"savedAt"} and
+                             _valid_iso_timestamp(plan_context.get("savedAt")))
+            if not valid_context:
+                issues.append(ValidationIssue("validation_failed", "Invalid internal theme plan context", "/_planContext", "error"))
+            else:
+                normalized["_planContext"] = dict(plan_context)
+        elif "_planContext" in draft:
+            issues.append(ValidationIssue("validation_failed", "Internal theme plan context is only valid for save", "/_planContext", "error"))
         errors = any(issue.severity == "error" for issue in issues)
         details: dict[str, Any] = {}
         if not errors and kind == "compose" and draft.get("delete") is not True:
@@ -410,7 +435,7 @@ class ThemesModule:
         replacement = ops.ReplaceDirectoryAtomic(ctx, target, staged_theme, classification != "absent", f"Save theme {slug}")
         operations.append(replacement)
         sidecar_document = {"schemaVersion": 1, "slug": slug, "transactionId": plan_id,
-                            "savedAt": ctx.clock.now_iso(), "files": _file_hashes(files)}
+                            "savedAt": draft["_planContext"]["savedAt"], "files": _file_hashes(files)}
         operations.append(ops.WriteFileAtomic(ctx, sidecar, json.dumps(sidecar_document, sort_keys=True, separators=(",", ":")) + "\n", "0644", f"Record ownership of {slug}"))
         claims = [ResourceClaim(f"file:{target}", "exclusive"), ResourceClaim(f"file:{sidecar}", "exclusive")]
         for item in diagnostics(resolve_tokens(draft, status.data.get("machineOverride", {}).get("values", {}))):

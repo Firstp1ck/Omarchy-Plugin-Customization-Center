@@ -24,6 +24,24 @@ def test_compose_plan_materializes_only_with_core_operations(isolated_home):
     assert plan.operations[-2].kind == "ReplaceDirectoryAtomic"
 
 
+def test_compose_plan_reuses_bounded_normalized_save_context(isolated_home):
+    paths = Paths.from_env(); registry = load_registry(ROOT, paths=paths); module = registry.module("themes")
+    status = module.status(build_context("themes", "read", paths=paths, registry=registry.view, plugin_dir=ROOT))
+    validation = module.validate(build_context("themes", "validate", paths=paths, registry=registry.view, plugin_dir=ROOT), SAMPLE, status)
+    assert validation.ok and set(validation.normalized_draft["_planContext"]) == {"savedAt"}
+    first = module.plan(build_context("themes", "plan", paths=paths, registry=registry.view, plugin_dir=ROOT), validation.normalized_draft, status)
+    second = module.plan(build_context("themes", "plan", paths=paths, registry=registry.view, plugin_dir=ROOT), validation.normalized_draft, status)
+    assert first == second
+    sidecar = json.loads(next(item.params["content"] for item in first.operations
+                              if item.kind == "WriteFileAtomic" and item.params["path"].endswith(".json")))
+    assert sidecar["savedAt"] == validation.normalized_draft["_planContext"]["savedAt"]
+
+    for saved_at in (["now"], "not-an-iso-timestamp", "2026-01-01T00:00:00"):
+        malformed = {**validation.normalized_draft, "_planContext": {"savedAt": saved_at}}
+        rejected = module.validate(build_context("themes", "validate", paths=paths, registry=registry.view, plugin_dir=ROOT), malformed, status)
+        assert not rejected.ok and any(item.pointer == "/_planContext" for item in rejected.issues)
+
+
 def test_activation_inverse_dependencies_cover_same_slug_and_preferred_wallpaper(isolated_home):
     paths = Paths.from_env(); registry = load_registry(ROOT, paths=paths); module = registry.module("themes")
     current = isolated_home / ".local/state/omarchy/current"

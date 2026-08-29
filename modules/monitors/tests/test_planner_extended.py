@@ -116,6 +116,71 @@ def test_validate_luac_and_missing_warning(backend, tmp_path, monkeypatch):
     assert result.ok and any(item.code == "monitors_no_lua_check" and item.severity == "warning" for item in result.issues)
 
 
+def test_activation_plan_reuses_bounded_normalized_time_context(backend, tmp_path, monkeypatch):
+    module = backend["planner"].MODULE
+    draft = {"schemaVersion":1,"action":"activate","profileId":"laptop","profile":SAMPLE["profile"],"assignments":{"laptop":"eDP-1"}}
+    validate_ctx = context(tmp_path / "validate", monkeypatch)
+    validate_ctx.clock = SimpleNamespace(
+        now=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
+        now_iso=lambda: pytest.fail("activation context must use the same clock reading"))
+    status = status_for(backend, validate_ctx)
+    validation = module.validate(validate_ctx, draft, status)
+    assert validation.ok
+    normalized = validation.normalized_draft
+    assert normalized["_planContext"] == {"confirmBy": 1767225780, "appliedAt": "2026-01-01T00:00:00Z"}
+
+    first_ctx = context(tmp_path / "plan", monkeypatch)
+    later_ctx = context(tmp_path / "plan", monkeypatch)
+    later_ctx.clock = SimpleNamespace(
+        now=lambda: datetime(2036, 1, 1, tzinfo=timezone.utc),
+        now_iso=lambda: "2036-01-01T00:00:00Z")
+    first = module.plan(first_ctx, normalized, status_for(backend, first_ctx))
+    second = module.plan(later_ctx, normalized, status_for(backend, later_ctx))
+    assert first == second
+    active = json.loads(first.operations[-1].params["content"])
+    assert active["appliedAt"] == normalized["_planContext"]["appliedAt"]
+
+    invalid_contexts = [
+        {**normalized["_planContext"], "confirmBy": normalized["_planContext"]["confirmBy"] + 1},
+        {"confirmBy": 1767225659, "appliedAt": "2025-12-31T23:57:59Z"},
+        {"confirmBy": 1767225780, "appliedAt": "not-an-iso-timestamp"},
+    ]
+    for plan_context in invalid_contexts:
+        malformed = json.loads(json.dumps(normalized)); malformed["_planContext"] = plan_context
+        rejected = module.validate(validate_ctx, malformed, status)
+        assert not rejected.ok and any(item.pointer == "/_planContext" for item in rejected.issues)
+
+
+def test_status_persists_live_modes_and_exposes_cached_modes_only_when_disconnected(backend, tmp_path, monkeypatch):
+    ctx = context(tmp_path, monkeypatch); module = backend["planner"].MODULE
+    profile_path = backend["planner"]._paths(ctx)["profiles"] / "laptop.json"
+    profile_path.parent.mkdir(parents=True)
+    profile_path.write_text(backend["profile"].canonical(SAMPLE["profile"]))
+    outputs, _ = backend["inventory"].parse_inventory(INVENTORY_TEXT)
+    monkeypatch.setattr(backend["planner"].inventory, "read", lambda unused, timeout_s=3: (outputs, ()))
+
+    live = module.status(ctx)
+    cache_path = ctx.paths.cache / "monitor-inventory.json"
+    cached = json.loads(cache_path.read_text())
+    assert set(cached) == {"observedAt", "outputs"}
+    assert cached["outputs"] == [{"identity": backend["planner"]._cache_identity(outputs[0]),
+                                   "modes": outputs[0]["modes"]}]
+    assert live.data["cachedModes"] == []
+    assert not any(item.code == "monitors_stale_modes" for item in live.warnings)
+
+    monkeypatch.setattr(backend["planner"].inventory, "read", lambda unused, timeout_s=3: ([], ()))
+    disconnected = module.status(ctx)
+    assert disconnected.data["cachedModes"] == [{"profileId": "laptop", "outputId": "laptop",
+        "identity": cached["outputs"][0]["identity"], "modes": outputs[0]["modes"],
+        "observedAt": cached["observedAt"], "stale": True}]
+    assert any(item.code == "monitors_stale_modes" for item in disconnected.warnings)
+    draft = {"schemaVersion":1,"action":"activate","profileId":"laptop","profile":None,"assignments":{}}
+    assert module._render_for_validation(draft, disconnected) is None
+    with pytest.raises(Exception) as caught:
+        module.plan(ctx, draft, disconnected)
+    assert caught.value.code == "monitors_output_missing"
+
+
 def test_revision_changes_for_every_identity_mode_geometry_and_toggle_field(backend, tmp_path, monkeypatch):
     ctx = context(tmp_path, monkeypatch); module = backend["planner"].MODULE
     outputs, _ = backend["inventory"].parse_inventory(INVENTORY_TEXT)

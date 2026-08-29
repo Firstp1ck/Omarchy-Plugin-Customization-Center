@@ -19,6 +19,35 @@ def _copy_hello(tmp_path: Path, repo: Path, name: str) -> Path:
     return target
 
 
+def test_missing_extra_module_directory_is_skipped(isolated_home, tmp_path, monkeypatch):
+    repo = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("CC_EXTRA_MODULE_DIRS", str(tmp_path / "missing"))
+    registry = load_registry(repo, paths=Paths.from_env())
+    assert set(registry.entries) == {"bar", "plugins", "menu", "defaults", "monitors", "themes", "keybindings", "modes"}
+    assert registry.warnings == ()
+
+
+def test_extra_module_directory_can_name_one_module(isolated_home, tmp_path, monkeypatch):
+    repo = Path(__file__).resolve().parents[2]
+    standalone = _copy_hello(tmp_path, repo, "standalone")
+    monkeypatch.setenv("CC_EXTRA_MODULE_DIRS", str(standalone))
+    registry = load_registry(repo, paths=Paths.from_env())
+    assert registry.module("standalone").id == "standalone"
+    assert registry.warnings == ()
+
+
+def test_extra_module_directory_can_contain_modules(isolated_home, tmp_path, monkeypatch):
+    repo = Path(__file__).resolve().parents[2]
+    parent = tmp_path / "extras"
+    parent.mkdir()
+    _copy_hello(parent, repo, "first-extra")
+    _copy_hello(parent, repo, "second-extra")
+    monkeypatch.setenv("CC_EXTRA_MODULE_DIRS", str(parent))
+    registry = load_registry(repo, paths=Paths.from_env())
+    assert {"first-extra", "second-extra"}.issubset(registry.entries)
+    assert registry.warnings == ()
+
+
 def test_broken_module_warns_and_healthy_loads(isolated_home, tmp_path):
     repo = Path(__file__).resolve().parents[2]
     healthy = _copy_hello(tmp_path, repo, "healthy")

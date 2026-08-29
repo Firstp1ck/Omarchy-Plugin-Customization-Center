@@ -35,6 +35,16 @@ def test_refuses_git_symlink_and_remove_non_file(isolated_home):
     with pytest.raises(CcError): remove_file(link)
 
 
+def test_refuses_directory_with_fifo(isolated_home):
+    if not hasattr(__import__("os"), "mkfifo"):
+        pytest.skip("os.mkfifo is unavailable")
+    import os
+    staged = isolated_home / "staged-special"; staged.mkdir()
+    os.mkfifo(staged / "fifo")
+    with pytest.raises(CcError, match="special entry"):
+        replace_directory_atomic(isolated_home / "target-special", staged, False)
+
+
 def test_refuses_git_path_components_for_target_and_staged(isolated_home):
     staged = isolated_home / "ordinary"; staged.mkdir()
     with pytest.raises(CcError):

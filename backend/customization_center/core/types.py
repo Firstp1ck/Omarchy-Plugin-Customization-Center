@@ -251,6 +251,8 @@ class Transaction(JsonType):
     reason: str | None = None
     skipped_inverse_ids: tuple[dict[str, Any], ...] = ()
     command_log: tuple[dict[str, Any], ...] = ()
+    in_flight_operation: dict[str, Any] | None = None
+    inverse_progress: tuple[str, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         out = _wire(self)
@@ -268,7 +270,8 @@ class Transaction(JsonType):
                    tuple(_get(data, "completed_operation_ids", ())), tuple(_get(data, "rolled_back_operation_ids", ())),
                    dict(data.get("backups", {})), VerifyResult.from_json(data["verify"]) if data.get("verify") else None,
                    data.get("confirmation"), tuple(data.get("errors", ())), tuple(_get(data, "rollback_errors", ())),
-                   data.get("reason"), tuple(_get(data, "skipped_inverse_ids", ())), tuple(_get(data, "command_log", ())))
+                   data.get("reason"), tuple(_get(data, "skipped_inverse_ids", ())), tuple(_get(data, "command_log", ())),
+                   _get(data, "in_flight_operation"), tuple(str(item) for item in _get(data, "inverse_progress", ())))
 
 
 @dataclass(frozen=True)

@@ -72,6 +72,8 @@ def _module_dirs(plugin_dir: Path, extra_module_dirs: Iterable[str | Path] | Non
         extras.extend(Path(value) for value in environment.split(os.pathsep) if value)
     for raw in extras:
         path = Path(raw).absolute()
+        if not path.is_dir():
+            continue
         # An override may name one module or a directory containing modules.
         candidates = [path] if (path / "module.json").is_file() else [p for p in path.iterdir() if p.is_dir()]
         for candidate in candidates:

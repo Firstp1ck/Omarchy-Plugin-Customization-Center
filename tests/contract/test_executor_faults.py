@@ -34,7 +34,10 @@ _JOURNAL_HOOKS = ["before_journal_fsync:applying", "before_journal_fsync:committ
                   "before_journal_fsync:rolling_back", "before_journal_fsync:rolled_back",
                   "before_journal_fsync:rollback_failed"]
 KILL_HOOKS = ["kill_process_at:after_backup", f"kill_process_at:after_op:{_OP_IDS[0]}",
+              f"kill_process_at:after_op_effect:{_OP_IDS[0]}",
+              f"kill_process_at:after_op_effect:{_OP_IDS[1]}",
               f"kill_process_at:before_inverse:{_OP_IDS[0]}",
+              f"kill_process_at:after_inverse_effect:{_OP_IDS[0]}:0",
               "kill_process_at:before_journal_fsync:rolling_back"]
 CASES = [(hook, [hook], "internal_error") for hook in _BASE_HOOKS if hook != "verification_mismatch"]
 CASES += [("verification_mismatch", ["verification_mismatch"], "verification_failed")]
@@ -83,7 +86,7 @@ def _assert_recovery(executor: Executor, tx):
 def test_hello_fault_matrix(label, hooks, expected_code, isolated_home, stub_command):
     stub_command("hello-command", {"exit_code": 0})
     paths = Paths.from_env(); snapshot = _seed_and_snapshot(paths)
-    fault_file = isolated_home / "faults.json"; fault_file.write_text(json.dumps({"hooks": hooks}))
+    fault_file = paths.private_tmpfile("-faults.json"); fault_file.write_text(json.dumps({"hooks": hooks}))
     executor, revision = _make(paths, fault_file)
     with pytest.raises(CcError) as caught:
         executor.apply("hello", SAMPLE, revision)
@@ -105,7 +108,7 @@ def test_killed_process_hooks_recover(kill_hook, isolated_home, stub_command):
     base_hook = kill_hook.removeprefix("kill_process_at:")
     hooks = [kill_hook]
     if "inverse" in kill_hook or "rolling_back" in kill_hook: hooks.insert(0, "before_verify")
-    fault_file = isolated_home / "faults.json"; fault_file.write_text(json.dumps({"hooks": hooks}))
+    fault_file = paths.private_tmpfile("-faults.json"); fault_file.write_text(json.dumps({"hooks": hooks}))
     executor, revision = _make(paths, fault_file)
     with pytest.raises(SystemExit): executor.apply("hello", SAMPLE, revision)
     assert kill_hook in executor.faults.consumed

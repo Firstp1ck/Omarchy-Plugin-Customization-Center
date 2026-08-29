@@ -13,6 +13,7 @@ Ui.BorderSurface {
     property var status: null
     property var planData: null
     property var validation: null
+    property var reviewedDraft: null
     property bool busy: false
     property bool reviewing: planData !== null
     property string errorCode: ""
@@ -36,7 +37,13 @@ Ui.BorderSurface {
         if (!backendClient || !moduleId || busy)
             return
         busy = true
+        planData = null
+        validation = null
+        reviewedDraft = null
+        _confirmationKeys = []
+        _confirmedKeys = []
         errorCode = ""
+        errorMessage = ""
         var draft = draftStore ? draftStore.draftFor(moduleId) : ({})
         backendClient.validate(moduleId, draft, function(validateResult) {
             if (!validateResult || !validateResult.ok) {
@@ -48,6 +55,7 @@ Ui.BorderSurface {
             }
             validation = validateResult.data
             var normalized = validateResult.data && validateResult.data.normalizedDraft ? validateResult.data.normalizedDraft : draft
+            reviewedDraft = normalized
             backendClient.plan(moduleId, normalized, function(planResult) {
                 busy = false
                 if (!planResult || !planResult.ok) {
@@ -93,7 +101,7 @@ Ui.BorderSurface {
         errorCode = ""
         if (transactionModel)
             transactionModel.watchCurrent(250)
-        var draft = draftStore ? draftStore.draftFor(moduleId) : ({})
+        var draft = reviewedDraft || (validation && validation.normalizedDraft) || (draftStore ? draftStore.draftFor(moduleId) : ({}))
         var revision = status && status.revision ? status.revision : (planData.expectedRevision || planData.expected_revision || "")
         var digest = planData.planDigest || planData.plan_digest || ""
         backendClient.apply(moduleId, draft, revision, digest, _confirmedKeys, planData, function(result) {
@@ -108,6 +116,7 @@ Ui.BorderSurface {
             var transactionId = result.transactionId || (result.data && result.data.transactionId) || ""
             if (draftStore) draftStore.discard(moduleId)
             planData = null
+            reviewedDraft = null
             if (transactionModel) transactionModel.refreshHistory()
             applied(transactionId, result)
         })
@@ -118,6 +127,7 @@ Ui.BorderSurface {
             return
         draftStore.discard(moduleId, function() { root.resetCompleted() })
         planData = null
+        reviewedDraft = null
     }
 
     RowLayout {

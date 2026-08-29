@@ -104,8 +104,11 @@ def _check_directory(path: Path) -> None:
         raise CcError("unsupported_config", f"Refusing symlinked directory: {path}")
     if path.exists():
         for item in path.rglob("*"):
-            if item.is_symlink():
+            item_mode = item.lstat().st_mode
+            if stat.S_ISLNK(item_mode):
                 raise CcError("unsupported_config", f"Refusing directory containing a symlink: {path}")
+            if not stat.S_ISDIR(item_mode) and not stat.S_ISREG(item_mode):
+                raise CcError("unsupported_config", f"Refusing directory containing a special entry: {item}")
             if item.name == ".git":
                 raise CcError("unsupported_config", f"Refusing Git directory: {path}")
 

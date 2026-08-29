@@ -139,9 +139,9 @@ def test_executor_refresh_timeout_rolls_back_and_runs_inverse_refresh(isolated_h
     with pytest.raises(CcError) as error:
         executor.apply("menu", json.loads(SAMPLE.read_text()), status.revision,
                        confirmations=("menu_normalization",))
-    assert error.value.code == "timeout"
+    assert error.value.code == "rollback_failed"
     transaction = executor.journal.history(limit=1)[0]
-    assert transaction.state == "rolled_back"
+    assert transaction.state == "rollback_failed"
     assert target.read_bytes() == original
     assert calls["refresh"] == 2
     write_inverse = transaction.plan.operations[0].inverse

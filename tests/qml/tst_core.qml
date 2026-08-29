@@ -11,6 +11,7 @@ TestCase {
     visible: true
 
     Component { id: draftStoreComponent; DraftStore {} }
+    Component { id: applyBarComponent; ApplyBar { width: 700 } }
     Component { id: backendLogicComponent; BackendLogic {} }
     Component { id: errorBannerComponent; ErrorBanner {} }
     Component { id: confirmDialogComponent; ConfirmDialog { width: 700; height: 500 } }
@@ -51,18 +52,44 @@ TestCase {
         }
     }
     Component {
+        id: fakeRecoveryBackendComponent
+        QtObject {
+            property var candidates: []
+            property var records: ({})
+            property int filteredLimit: 0
+            property string filteredState: ""
+            property var transactionIds: []
+            function historyFiltered(moduleId, limit, state, callback) {
+                filteredLimit = limit
+                filteredState = state
+                callback({ ok: true, data: { transactions: candidates } })
+            }
+            function transaction(transactionId, callback) {
+                transactionIds = transactionIds.concat([transactionId])
+                callback({ ok: true, data: { transaction: records[transactionId] } })
+            }
+        }
+    }
+    Component {
         id: fakeBackendComponent
         QtObject {
+            signal pendingHandoffReconciled(string transactionId, var result)
             property var storedDraft: ({ restored: "from disk" })
             property int saveCount: 0
             property int discardCount: 0
             property int pollCount: 0
             property int stopPollCount: 0
+            property int statusCount: 0
+            property int abandonCount: 0
+            property string lastAbandoned: ""
             property int lastPollInterval: 0
             property bool statusPending: false
             property bool defaultsShape: false
+            property bool validationFails: false
             property var pollCallback: null
             property var lastSaved: null
+            property var lastPlannedDraft: null
+            property var lastAppliedDraft: null
             function draftLoad(moduleId, callback) {
                 callback({ ok: true, data: { draft: { draft: storedDraft } } })
             }
@@ -75,7 +102,22 @@ TestCase {
                 discardCount += 1
                 if (callback) callback({ ok: true, data: {} })
             }
+            function validate(moduleId, draft, callback) {
+                if (validationFails)
+                    callback({ ok: false, errors: [{ code: "validation_failed", message: "Rejected second review" }] })
+                else
+                    callback({ ok: true, data: { normalizedDraft: { schemaVersion: 1, marker: "reviewed" } } })
+            }
+            function plan(moduleId, draft, callback) {
+                lastPlannedDraft = draft
+                callback({ ok: true, data: { plan: { expectedRevision: "revision-1", planDigest: "digest-1", requiresConfirmation: [] } } })
+            }
+            function apply(moduleId, draft, revision, digest, confirmations, planData, callback) {
+                lastAppliedDraft = draft
+                callback({ ok: true, data: { transactionId: "tx-1" } })
+            }
             function status(moduleId, callback) {
+                statusCount += 1
                 var pending = statusPending ? [{ id: "handoff-1", sentinelExists: false }] : []
                 if (defaultsShape) {
                     var ids = ["browser", "terminal", "editor", "agent"]
@@ -100,7 +142,11 @@ TestCase {
             function stopPolling(handle) { stopPollCount += 1; pollCallback = null }
             function query(moduleId, name, args, callback) { callback({ ok: true, data: { available: false, count: null } }) }
             function reconcile(transactionId, callback) { if (callback) callback({ ok: true, data: { state: "pending_handoff" } }) }
-            function abandon(transactionId, callback) { if (callback) callback({ ok: true, data: { state: "rolled_back" } }) }
+            function abandon(transactionId, callback) {
+                abandonCount += 1
+                lastAbandoned = transactionId
+                if (callback) callback({ ok: true, data: { state: "rolled_back" } })
+            }
             function history(callback) { callback({ ok: true, data: { transactions: [] } }) }
             function transaction(transactionId, callback) { callback({ ok: false, data: null }) }
         }
@@ -185,6 +231,24 @@ TestCase {
         compare(registry.pageItem.visible, true)
         compare(registry.pageItem.draft.restored, "from disk")
         compare(registry.pageItem.status.value, 7)
+    }
+
+    function test_pluginRefreshAbandonAndReconciliationRefreshStatus() {
+        var backend = createTemporaryObject(fakeBackendComponent, testCase)
+        var registry = createTemporaryObject(registryComponent, testCase, { backendClient: backend })
+        registry.modules = [{ id: "plugins", title: "Plugins", pageUrl: Qt.resolvedUrl("../../modules/plugins/Page.qml"), capabilities: ({}) }]
+        verify(registry.select("plugins", {}))
+        tryVerify(function() { return registry.pageItem !== null })
+        compare(backend.statusCount, 1)
+        registry.pageItem.requestRefresh()
+        compare(backend.statusCount, 2)
+        registry.pageItem.requestAbandon("handoff-7")
+        compare(backend.abandonCount, 1)
+        compare(backend.lastAbandoned, "handoff-7")
+        compare(backend.statusCount, 3)
+        backend.pendingHandoffReconciled("handoff-8", { ok: true })
+        compare(backend.statusCount, 4)
+        verify(registry.pageItem.handlesPendingHandoffs === undefined)
     }
 
     function test_activeModulePollsWhileHandoffPending() {
@@ -293,6 +357,47 @@ TestCase {
         compare(failedDecision.forceMaximumTimeout, true)
         verify(failedDecision.logLine.indexOf("plan could not be read") >= 0)
         compare(backend.timeoutFor("rollback", failedDecision.plan, failedDecision.forceMaximumTimeout), 15 * 60 * 1000)
+    }
+
+    function test_applyBarAppliesReviewedNormalizedDraft() {
+        var backend = createTemporaryObject(fakeBackendComponent, testCase)
+        var store = createTemporaryObject(draftStoreComponent, testCase, { backendClient: backend, autosaveDelayMs: 10000 })
+        store.replace("hello", { schemaVersion: 1, marker: "raw" }, false)
+        var bar = createTemporaryObject(applyBarComponent, testCase, {
+            backendClient: backend,
+            draftStore: store,
+            moduleId: "hello",
+            status: { revision: "revision-1" }
+        })
+        verify(bar !== null)
+        bar.review()
+        compare(backend.lastPlannedDraft.marker, "reviewed")
+        store.replace("hello", { schemaVersion: 1, marker: "edited-after-review" }, false)
+        bar.requestApply()
+        compare(backend.lastAppliedDraft.marker, "reviewed")
+    }
+
+    function test_applyBarClearsObsoleteReviewBeforeFailedRereview() {
+        var backend = createTemporaryObject(fakeBackendComponent, testCase)
+        var store = createTemporaryObject(draftStoreComponent, testCase, { backendClient: backend, autosaveDelayMs: 10000 })
+        store.replace("hello", { schemaVersion: 1, marker: "raw" }, false)
+        var bar = createTemporaryObject(applyBarComponent, testCase, {
+            backendClient: backend,
+            draftStore: store,
+            moduleId: "hello",
+            status: { revision: "revision-1" }
+        })
+        verify(bar !== null)
+        bar.review()
+        verify(bar.planData !== null)
+        verify(bar.reviewedDraft !== null)
+        backend.validationFails = true
+        bar.review()
+        compare(bar.planData, null)
+        compare(bar.reviewedDraft, null)
+        compare(bar.validation, null)
+        compare(bar.reviewing, false)
+        compare(bar.errorCode, "validation_failed")
     }
 
     function test_draftDebounceCloseAndHistoryDepth() {
@@ -415,8 +520,17 @@ TestCase {
         compare(banner.recoveryFor("superseded").length, 0)
     }
 
-    function test_transactionModelClearsResolvedPinnedRecovery() {
-        var model = createTemporaryObject(transactionModelComponent, testCase)
+    function test_transactionModelScansAllFailedRecordsUntilUnresolvedRecovery() {
+        var backend = createTemporaryObject(fakeRecoveryBackendComponent, testCase)
+        backend.candidates = [{ id: "newer-resolved", state: "rollback_failed" },
+                              { id: "older-than-history-limit", state: "rollback_failed" }]
+        backend.records = {
+            "newer-resolved": { id: "newer-resolved", state: "rollback_failed",
+                                rollbackErrors: [{ resolved: true }] },
+            "older-than-history-limit": { id: "older-than-history-limit", state: "rollback_failed",
+                                          rollbackErrors: [{ resolved: false }] }
+        }
+        var model = createTemporaryObject(transactionModelComponent, testCase, { backendClient: backend })
         var current = model.transactionFromResult({
             ok: true,
             data: {
@@ -426,9 +540,19 @@ TestCase {
         })
         compare(current.confirmationToken, "clear-token")
         compare(current.confirmation.deadline, "2030-01-01T00:00:00Z")
-        model.pinnedRecovery = { id: "failed", state: "rollback_failed" }
-        model.history = []
+
         model._updatePinned()
+        compare(backend.filteredLimit, 1000000)
+        compare(backend.filteredState, "rollback_failed")
+        compare(JSON.stringify(backend.transactionIds), JSON.stringify(["newer-resolved", "older-than-history-limit"]))
+        compare(model.pinnedRecovery.id, "older-than-history-limit")
+        verify(model.applyBlocked)
+
+        backend.records["older-than-history-limit"] = {
+            id: "older-than-history-limit", state: "rollback_failed", rollbackErrors: [{ resolved: true }]
+        }
+        model.refreshPinnedRecovery("older-than-history-limit")
         compare(model.pinnedRecovery, null)
+        compare(model.applyBlocked, false)
     }
 }

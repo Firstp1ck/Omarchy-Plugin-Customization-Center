@@ -33,6 +33,12 @@ def mode_path(ctx: Any, mode_id: str) -> Path:
     return mode_dir(ctx) / f"{mode_id}.json"
 
 
+def rewrite_monitor_profile_reference(mode: dict[str, Any], old_id: str, new_id: str) -> None:
+    monitors = mode.get("members", {}).get("monitors")
+    if isinstance(monitors, dict) and monitors.get("profileId") == old_id:
+        monitors["profileId"] = new_id
+
+
 def _issue(code: str, message: str, pointer: str) -> ValidationIssue:
     return ValidationIssue(code, message, pointer, "error")
 

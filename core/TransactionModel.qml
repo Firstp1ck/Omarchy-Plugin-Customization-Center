@@ -9,6 +9,8 @@ QtObject {
     property var pinnedRecovery: null
     property var _currentPoll: null
     property bool recoveryBusy: false
+    property int _recoveryScan: 0
+    property bool _recoveryScanPending: false
 
     signal changed()
 
@@ -143,8 +145,13 @@ QtObject {
         backendClient.transaction(transactionId, function(result) {
             var transaction = transactionFromResult(result)
             if (transaction && transaction.id === transactionId) {
-                pinnedRecovery = needsRecovery(transaction) ? transaction : null
-                changed()
+                if (needsRecovery(transaction)) {
+                    pinnedRecovery = transaction
+                    _recoveryScanPending = false
+                    changed()
+                } else {
+                    _updatePinned()
+                }
             }
             if (callback) callback(result)
         })
@@ -214,25 +221,47 @@ QtObject {
     }
 
     function _updatePinned() {
-        var found = null
-        for (var i = 0; i < history.length; ++i) {
-            if (history[i].state === "rollback_failed") {
-                found = history[i]
-                break
-            }
-        }
-        if (!found) {
-            pinnedRecovery = null
+        if (!backendClient)
             return
-        }
-        if (pinnedRecovery && pinnedRecovery.id === found.id) {
-            if (!needsRecovery(pinnedRecovery))
-                pinnedRecovery = null
-            return
-        }
-        pinnedRecovery = found
-        refreshPinnedRecovery(found.id)
+        _recoveryScan += 1
+        var scan = _recoveryScan
+        _recoveryScanPending = true
+        backendClient.historyFiltered("", 1000000, "rollback_failed", function(result) {
+            if (scan !== _recoveryScan || !result || !result.ok)
+                return
+            var candidates = result.data && (result.data.transactions || result.data.history)
+                    ? (result.data.transactions || result.data.history) : []
+            _inspectRecoveryCandidates(candidates, 0, scan)
+        })
     }
 
-    readonly property bool applyBlocked: pinnedRecovery !== null
+    function _inspectRecoveryCandidates(candidates, index, scan) {
+        if (scan !== _recoveryScan)
+            return
+        if (index >= candidates.length) {
+            pinnedRecovery = null
+            _recoveryScanPending = false
+            changed()
+            return
+        }
+        var transactionId = candidates[index].id
+        if (!transactionId) {
+            _inspectRecoveryCandidates(candidates, index + 1, scan)
+            return
+        }
+        backendClient.transaction(transactionId, function(result) {
+            if (scan !== _recoveryScan)
+                return
+            var transaction = transactionFromResult(result)
+            if (transaction && transaction.id === transactionId && needsRecovery(transaction)) {
+                pinnedRecovery = transaction
+                _recoveryScanPending = false
+                changed()
+                return
+            }
+            _inspectRecoveryCandidates(candidates, index + 1, scan)
+        })
+    }
+
+    readonly property bool applyBlocked: pinnedRecovery !== null || _recoveryScanPending
 }

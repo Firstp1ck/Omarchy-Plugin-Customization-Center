@@ -38,7 +38,7 @@ def test_save_profile_fault_rolls_back_byte_identical(tmp_path, monkeypatch):
     paths = _environment(tmp_path, monkeypatch)
     target = paths.xdg_config_home / "omarchy/customization-center/monitor-profiles/laptop.json"
     target.parent.mkdir(parents=True); original = b'{"schemaVersion":1,"seed":true}\n'; target.write_bytes(original)
-    faults = paths.home / "faults.json"; faults.write_text('{"hooks":["before_verify"]}')
+    faults = paths.private_tmpfile("-faults.json"); faults.write_text('{"hooks":["before_verify"]}')
     monkeypatch.setenv("CC_TEST_FAULTS", str(faults))
     registry = load_registry(ROOT, paths=paths); executor = Executor(ROOT, registry, paths, ROOT / "backend/ccctl")
     status = registry.module("monitors").status(build_context("monitors", "read", paths=paths, registry=registry.view, plugin_dir=ROOT))
@@ -46,6 +46,25 @@ def test_save_profile_fault_rolls_back_byte_identical(tmp_path, monkeypatch):
     record = executor.journal.history(limit=1)[0]
     assert record.state == "rolled_back"
     assert target.read_bytes() == original
+
+
+def test_reviewed_activation_context_applies_with_matching_plan_digest(tmp_path, monkeypatch):
+    monkeypatch.setattr(Executor, "_wait_gate", lambda self, tx, operation, results, verify_partial=True: tx)
+    paths = _environment(tmp_path, monkeypatch)
+    registry = load_registry(ROOT, paths=paths)
+    executor = Executor(ROOT, registry, paths, ROOT / "backend/ccctl")
+    module = registry.module("monitors")
+    status = module.status(build_context("monitors", "read", paths=paths, registry=registry.view, plugin_dir=ROOT))
+    draft = json.loads(json.dumps(SAMPLE))
+    draft.update({"action":"activate", "profileId":"laptop", "assignments":{"laptop":"eDP-1"}})
+    validation = module.validate(build_context("monitors", "validate", paths=paths, registry=registry.view, plugin_dir=ROOT), draft, status)
+    assert validation.ok and validation.normalized_draft is not None
+    reviewed_plan = module.plan(build_context("monitors", "plan", paths=paths, registry=registry.view, plugin_dir=ROOT), validation.normalized_draft, status)
+
+    transaction = executor.apply("monitors", validation.normalized_draft, status.revision, Executor.digest(reviewed_plan))
+
+    assert transaction.state == "committed"
+    assert transaction.plan.plan_digest == Executor.digest(reviewed_plan)
 
 
 def test_activation_before_and_after_operation_faults_restore_all_files(tmp_path, monkeypatch):
@@ -72,7 +91,7 @@ def test_activation_before_and_after_operation_faults_restore_all_files(tmp_path
         original_host = (Path(__file__).parent / "fixtures/monitors-lua/shipped-default.lua").read_bytes(); host.write_bytes(original_host)
         generated = paths.xdg_config_home / "omarchy/customization-center/generated/monitors.lua"
         active = paths.module_state("monitors") / "active.json"
-        faults = paths.home / "faults.json"; faults.write_text(json.dumps({"hooks":[hook]})); monkeypatch.setenv("CC_TEST_FAULTS", str(faults))
+        faults = paths.private_tmpfile("-faults.json"); faults.write_text(json.dumps({"hooks":[hook]})); monkeypatch.setenv("CC_TEST_FAULTS", str(faults))
         registry = load_registry(ROOT, paths=paths); executor = Executor(ROOT, registry, paths, ROOT / "backend/ccctl")
         status = registry.module("monitors").status(build_context("monitors", "read", paths=paths, registry=registry.view, plugin_dir=ROOT))
         with pytest.raises(CcError) as caught: executor.apply("monitors", draft, status.revision)
@@ -95,7 +114,7 @@ def test_activation_before_and_after_operation_faults_restore_all_files(tmp_path
         original_host = (Path(__file__).parent / "fixtures/monitors-lua/shipped-default.lua").read_bytes(); host.write_bytes(original_host)
         generated = paths.xdg_config_home / "omarchy/customization-center/generated/monitors.lua"
         active = paths.module_state("monitors") / "active.json"
-        faults = paths.home / "faults.json"
+        faults = paths.private_tmpfile("-faults.json")
         faults.write_text(json.dumps({"hooks":[f"after_op:{final_id}", f"before_inverse:{target_operation.id}"]}))
         monkeypatch.setenv("CC_TEST_FAULTS", str(faults))
         registry = load_registry(ROOT, paths=paths); executor = Executor(ROOT, registry, paths, ROOT / "backend/ccctl")

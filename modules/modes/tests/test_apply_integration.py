@@ -74,7 +74,7 @@ def test_real_executor_commits_composed_mode_and_record(modes_backend,tmp_path,m
 
 def test_fault_before_last_record_rolls_member_back(modes_backend,tmp_path,monkeypatch):
     executor,paths,draft,status=setup(tmp_path,modes_backend,monkeypatch)
-    fault=paths.home/"fault.json"; fault.write_text(json.dumps({"hooks":["before_op:modes.0001"]}))
+    fault=paths.private_tmpfile("-fault.json"); fault.write_text(json.dumps({"hooks":["before_op:modes.0001"]}))
     executor.environ={**executor.environ,"CC_TEST_FAULTS":str(fault)}
     monkeypatch.setenv("CC_TEST_FAULTS",str(fault)); executor.faults=executor.faults.from_environment(paths)
     with pytest.raises(CcError) as caught: executor.apply("modes",draft,status.revision)

@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import time
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -212,7 +213,7 @@ def validate_operation(op: Operation, paths: Any, module_extra_paths: Iterable[s
         if p.get("body") is not None and not isinstance(p.get("body"), str):
             raise CcError("unsupported_config", "Managed block body must be text or null")
     elif op.kind == "EnsureDirectory":
-        if not p.get("remove_if_empty"):
+        if not p.get("remove_if_empty") and not p.get("restore_mode"):
             _required(p, "mode")
     elif op.kind == "ReplaceDirectoryAtomic":
         _required(p, "staged_dir", "allow_existing")
@@ -314,6 +315,24 @@ def _raw_marked_replace(data: bytes, begin: str, end: str, body: str | None) -> 
     return (text[:start] + begin + "\n" + body.rstrip("\n") + "\n" + end + text[finish:]).encode()
 
 
+def managed_block_post_image(op: Operation, exec_ctx: Any) -> bytes:
+    p = op.params
+    path = Path(p["path"])
+    try:
+        before = path.read_bytes()
+    except FileNotFoundError:
+        before = b""
+    body = p.get("body")
+    if p.get("body_from_backup"):
+        original = _backup_bytes(exec_ctx, p["path"])
+        body = (extract_block(original, p["name"], p["version"]) if p.get("name")
+                else _raw_marked_extract(original, p["begin_marker"], p["end_marker"]))
+    if p.get("name"):
+        prefix = "--" if path.suffix == ".lua" else "//"
+        return replace_block(before, p["name"], p["version"], body, prefix)
+    return _raw_marked_replace(before, p["begin_marker"], p["end_marker"], body)
+
+
 def run_forward(op: Operation, exec_ctx: Any) -> OperationResult:
     started = time.monotonic()
     p = op.params
@@ -322,22 +341,8 @@ def run_forward(op: Operation, exec_ctx: Any) -> OperationResult:
         write_bytes_atomic(p["path"], data, int(p["mode"], 8) if p.get("mode") else None)
         return _result(op, started, digest=hashlib.sha256(data).hexdigest())
     if op.kind == "ReplaceManagedBlock":
-        path = Path(p["path"])
-        try:
-            before = path.read_bytes()
-        except FileNotFoundError:
-            before = b""
-        body = p.get("body")
-        if p.get("body_from_backup"):
-            original = _backup_bytes(exec_ctx, p["path"])
-            body = (extract_block(original, p["name"], p["version"]) if p.get("name")
-                    else _raw_marked_extract(original, p["begin_marker"], p["end_marker"]))
-        if p.get("name"):
-            prefix = "--" if path.suffix == ".lua" else "//"
-            after = replace_block(before, p["name"], p["version"], body, prefix)
-        else:
-            after = _raw_marked_replace(before, p["begin_marker"], p["end_marker"], body)
-        write_bytes_atomic(path, after, None)
+        after = managed_block_post_image(op, exec_ctx)
+        write_bytes_atomic(p["path"], after, None)
         return _result(op, started, digest=hashlib.sha256(after).hexdigest())
     if op.kind == "EnsureDirectory":
         path = Path(p["path"])
@@ -347,10 +352,15 @@ def run_forward(op: Operation, exec_ctx: Any) -> OperationResult:
             except FileNotFoundError:
                 pass
             return _result(op, started)
-        created = not path.exists()
-        mkdir_durable(path, int(p["mode"], 8))
-        os.chmod(path, int(p["mode"], 8))
-        return _result(op, started, stdout=json.dumps({"created": created}))
+        requested_mode = p.get("restore_mode") or p["mode"]
+        existed = path.exists()
+        if existed and not path.is_dir():
+            raise CcError("unsupported_config", f"Path is not a directory: {path}")
+        previous_mode = f"{stat.S_IMODE(path.stat().st_mode):04o}" if existed else None
+        mkdir_durable(path, int(requested_mode, 8))
+        os.chmod(path, int(requested_mode, 8))
+        return _result(op, started, stdout=json.dumps({"created": not existed,
+            "previousMode": previous_mode, "requestedMode": requested_mode}))
     if op.kind == "ReplaceDirectoryAtomic":
         replacement = replace_directory_atomic(p["path"], p["staged_dir"], p["allow_existing"])
         exec_ctx.cache.setdefault("directory_replacements", {})[op.id] = replacement
@@ -401,9 +411,19 @@ def run_forward(op: Operation, exec_ctx: Any) -> OperationResult:
 
 def build_inverse(op: Operation, exec_ctx: Any, result: OperationResult | None = None) -> tuple[Operation, ...]:
     if op.kind == "EnsureDirectory":
-        if result and json.loads(result.stdout_head or "{}").get("created"):
+        try:
+            details = json.loads(result.stdout_head or "{}") if result else {}
+        except (TypeError, json.JSONDecodeError):
+            details = {}
+        if details.get("created"):
             params = {"path": op.params["path"], "remove_if_empty": True}
             return (Operation(op.id + ".inverse", op.module_id, "EnsureDirectory", params, "Remove created directory", (), (), 30),)
+        previous_mode = details.get("previousMode")
+        requested_mode = details.get("requestedMode")
+        if isinstance(previous_mode, str) and isinstance(requested_mode, str) and previous_mode != requested_mode:
+            params = {"path": op.params["path"], "restore_mode": previous_mode}
+            return (Operation(op.id + ".inverse", op.module_id, "EnsureDirectory", params,
+                              "Restore directory mode", (), (), 30),)
         return ()
     if op.kind == "ReplaceDirectoryAtomic":
         explicit = tuple(_inverse_items(op.inverse))
@@ -420,4 +440,4 @@ def build_inverse(op: Operation, exec_ctx: Any, result: OperationResult | None =
     return _inverse_items(op.inverse)
 
 
-__all__ = sorted(_KINDS) + ["validate_operation", "run_forward", "build_inverse"]
+__all__ = sorted(_KINDS) + ["validate_operation", "managed_block_post_image", "run_forward", "build_inverse"]

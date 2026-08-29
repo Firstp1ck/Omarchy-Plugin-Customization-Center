@@ -100,6 +100,26 @@ class Paths:
         except FileNotFoundError:
             return default
 
+    def write_cache_json(self, relative_path: str | Path, value: Any) -> Path:
+        """Atomically write bounded, non-authoritative JSON below the cache root."""
+        relative = Path(relative_path)
+        if relative.is_absolute() or not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+            raise CcError("unsupported_config", "Cache path must be a safe relative path")
+        target = (self.cache / relative).absolute()
+        cache_root = self.cache.absolute()
+        if not target.is_relative_to(cache_root) or target == cache_root or not self.symlink_safe(target):
+            raise CcError("unsupported_config", f"Cache path is outside the cache root: {target}")
+        try:
+            payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                                 allow_nan=False).encode("utf-8") + b"\n"
+        except (TypeError, ValueError) as error:
+            raise CcError("unsupported_config", "Cache value must be finite JSON") from error
+        if len(payload) > 1024 * 1024:
+            raise CcError("unsupported_config", "Cache value exceeds the 1 MiB limit")
+        from .atomic import write_bytes_atomic
+        write_bytes_atomic(target, payload, 0o600)
+        return target
+
     def read_regular(self, path: str | Path, max_bytes: int) -> bytes:
         """Read a bounded regular file without following symlinks or accepting an inode swap."""
         target = Path(path).absolute()

@@ -107,7 +107,11 @@ def result_data(command, args, paths, registry, executor):
     if command == "status":
         module = view.module(args.module)
         status = module.status(build_context(args.module, "read", paths=paths, registry=view, plugin_dir=PLUGIN_DIR))
-        pending = [tx.to_json() for tx in Journal(paths).history(args.module, 50, "pending_handoff")]
+        pending = []
+        for tx in Journal(paths).history(args.module, 50, "pending_handoff"):
+            row = tx.to_json()
+            row["sentinelExists"] = (paths.state / "handoffs" / f"{tx.id}.json").is_file()
+            pending.append(row)
         return {**status.to_json(), "pendingHandoffs": pending}, status.revision, status.warnings, None
     if command in {"validate", "plan"}:
         module = view.module(args.module)

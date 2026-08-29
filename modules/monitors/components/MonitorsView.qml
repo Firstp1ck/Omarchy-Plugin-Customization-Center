@@ -69,6 +69,10 @@ FocusScope {
         if (!rule) return null
         var connector = draft && draft.assignments && draft.assignments[rule.id] ? draft.assignments[rule.id] : rule.identity.connector
         for (var i = 0; i < outputs.length; ++i) if (outputs[i].connector === connector) return outputs[i]
+        var cached = statusData && statusData.cachedModes ? statusData.cachedModes : []
+        for (var j = 0; j < cached.length; ++j)
+            if (cached[j].profileId === selectedProfileId && cached[j].outputId === rule.id)
+                return { modes: cached[j].modes, stale: true, observedAt: cached[j].observedAt }
         return null
     }
     function validScale120(rule, scale120) {
@@ -314,6 +318,7 @@ FocusScope {
                             objectName: "modePicker"
                             Layout.fillWidth: true
                             modes: { var output = root.selectedInventory(); return output ? output.modes : [] }
+                            stale: { var output = root.selectedInventory(); return output ? output.stale === true : false }
                             value: { var rule = root.selectedRule(); return rule ? rule.mode : null }
                             onModeSelected: function(mode) { root.patchOutput(root.selectedOutputId, { mode: mode }) }
                         }

@@ -54,6 +54,10 @@
     "acceptedWarnings": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
     "activate": {"type": "boolean"},
     "delete": {"type": "boolean"},
-    "tryInShell": {"type": "boolean"}
+    "tryInShell": {"type": "boolean"},
+    "_planContext": {
+      "type": "object", "additionalProperties": false, "required": ["savedAt"],
+      "properties": {"savedAt": {"type": "string", "minLength": 1, "maxLength": 64}}
+    }
   }
 }

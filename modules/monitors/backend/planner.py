@@ -5,7 +5,7 @@ import json
 import re
 import time
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,44 @@ from customization_center.core import (Capabilities, Capability, CcError, Plan, 
 from . import geometry, identity, inventory, lua_render, ownership, profile
 
 _CONNECTOR = re.compile(r"^[A-Za-z0-9._-]+$")
+_CACHE_FILE = "monitor-inventory.json"
+_IDENTITY_FIELDS = ("description", "make", "model", "serial", "connector")
+_ACTIVATION_GUARD_SECONDS = 180
+_ACTIVATION_REVIEW_MAX_AGE_SECONDS = 120
+_ACTIVATION_CLOCK_SKEW_SECONDS = 5
+
+
+def _parse_iso_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not 1 <= len(value) <= 64:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _activation_plan_context(now: datetime) -> dict[str, Any]:
+    applied_at = now.astimezone(timezone.utc)
+    return {
+        "confirmBy": int((applied_at + timedelta(seconds=_ACTIVATION_GUARD_SECONDS)).timestamp()),
+        "appliedAt": applied_at.isoformat().replace("+00:00", "Z"),
+    }
+
+
+def _valid_activation_plan_context(value: Any, now: datetime) -> bool:
+    if (not isinstance(value, dict) or set(value) != {"confirmBy", "appliedAt"} or
+            not isinstance(value.get("confirmBy"), int) or isinstance(value.get("confirmBy"), bool)):
+        return False
+    applied_at = _parse_iso_timestamp(value.get("appliedAt"))
+    if applied_at is None:
+        return False
+    expected_confirm_by = int((applied_at + timedelta(seconds=_ACTIVATION_GUARD_SECONDS)).timestamp())
+    age_seconds = (now.astimezone(timezone.utc) - applied_at).total_seconds()
+    return (value["confirmBy"] == expected_confirm_by and
+            -_ACTIVATION_CLOCK_SKEW_SECONDS <= age_seconds <= _ACTIVATION_REVIEW_MAX_AGE_SECONDS)
 
 
 def _paths(ctx: Any) -> dict[str, Path]:
@@ -36,6 +74,66 @@ def _read_bytes(path: Path) -> bytes:
 
 def _sha256(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def _cache_identity(output: dict[str, Any]) -> dict[str, str]:
+    return {key: str(output.get(key, "")) for key in _IDENTITY_FIELDS}
+
+
+def _read_mode_cache(ctx: Any) -> dict[str, Any] | None:
+    try:
+        value = json.loads(ctx.paths.read_regular(ctx.paths.cache / _CACHE_FILE, 1024 * 1024))
+    except (CcError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(value, dict) or set(value) != {"observedAt", "outputs"} or not isinstance(value.get("observedAt"), str) or not isinstance(value.get("outputs"), list):
+        return None
+    rows: list[dict[str, Any]] = []
+    for row in value["outputs"]:
+        if not isinstance(row, dict) or set(row) != {"identity", "modes"} or not isinstance(row.get("identity"), dict) or not isinstance(row.get("modes"), list):
+            return None
+        identity_value = row["identity"]
+        if set(identity_value) != set(_IDENTITY_FIELDS) or any(not isinstance(identity_value.get(key), str) for key in _IDENTITY_FIELDS):
+            return None
+        modes = row["modes"]
+        if any(not isinstance(mode, dict) or set(mode) != {"width", "height", "refreshMilliHz"}
+               or any(not isinstance(mode.get(key), int) or isinstance(mode.get(key), bool) or mode[key] <= 0
+                      for key in ("width", "height", "refreshMilliHz")) for mode in modes):
+            return None
+        rows.append({"identity": dict(identity_value), "modes": json.loads(json.dumps(modes))})
+    return {"observedAt": value["observedAt"], "outputs": rows}
+
+
+def _write_mode_cache(ctx: Any, outputs: list[dict[str, Any]], previous: dict[str, Any] | None, observed_at: str) -> None:
+    by_identity: dict[str, dict[str, Any]] = {}
+    for row in (previous or {}).get("outputs", []):
+        key = json.dumps(row["identity"], sort_keys=True, separators=(",", ":"))
+        by_identity[key] = row
+    for output in outputs:
+        row = {"identity": _cache_identity(output), "modes": json.loads(json.dumps(output.get("modes", [])))}
+        key = json.dumps(row["identity"], sort_keys=True, separators=(",", ":"))
+        by_identity[key] = row
+    document = {"observedAt": observed_at, "outputs": [by_identity[key] for key in sorted(by_identity)]}
+    ctx.paths.write_cache_json(_CACHE_FILE, document)
+
+
+def _cached_mode_sources(profiles: list[dict[str, Any]], live_outputs: list[dict[str, Any]],
+                         cache: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not cache:
+        return []
+    cached_outputs = [{**row["identity"], "modes": row["modes"]} for row in cache["outputs"]]
+    sources: list[dict[str, Any]] = []
+    for value in profiles:
+        for rule in value["outputs"]:
+            if any(identity.score(rule, output, {}) > 0 for output in live_outputs):
+                continue
+            candidates = [output for output in cached_outputs if identity.score(rule, output, {}) > 0]
+            if len(candidates) != 1:
+                continue
+            candidate = candidates[0]
+            sources.append({"profileId": value["id"], "outputId": rule["id"],
+                            "identity": _cache_identity(candidate), "modes": candidate["modes"],
+                            "observedAt": cache["observedAt"], "stale": True})
+    return sources
 
 
 def _load_profiles(root: Path) -> tuple[list[dict[str, Any]], tuple[Warning, ...]]:
@@ -165,15 +263,28 @@ class MonitorsModule:
     def status(self, ctx: Any) -> Status:
         paths = _paths(ctx)
         warnings: list[Warning] = []
+        inventory_live = False
         try:
             outputs, inventory_warnings = inventory.read(ctx)
             warnings.extend(inventory_warnings)
             runtime_error = None
+            inventory_live = True
         except CcError as error:
             outputs = []
             runtime_error = {"code": error.code, "message": error.message, "recovery": "Run this page inside Hyprland and retry hyprctl monitors all"}
         profiles, profile_warnings = _load_profiles(paths["profiles"])
         warnings.extend(profile_warnings)
+        mode_cache = _read_mode_cache(ctx)
+        cached_modes = _cached_mode_sources(profiles, outputs, mode_cache)
+        for source in cached_modes:
+            warnings.append(Warning("monitors_stale_modes",
+                f"Modes for disconnected profile output {source['outputId']} came from the cache",
+                source["outputId"], "Reconnect the output before validating or applying this mode"))
+        if inventory_live:
+            try:
+                _write_mode_cache(ctx, outputs, mode_cache, ctx.clock.now_iso())
+            except (CcError, OSError):
+                pass
         host = _read_bytes(paths["host"])
         loader = ownership.loader(host) if host else {"state": "host-missing", "beginLine": None, "endLine": None, "problems": []}
         loader["path"] = str(paths["host"])
@@ -245,6 +356,7 @@ class MonitorsModule:
         data = {
             "schemaVersion": 1,
             "inventory": {"outputs": outputs, "observedAt": ctx.clock.now_iso(), "configErrors": [], "error": runtime_error},
+            "cachedModes": cached_modes,
             "profiles": profile_rows, "active": active_data, "loader": loader, "handwritten": handwritten,
             "toggles": toggle_data, "related": {"gdkScale": gdk_scale, "monitorScaleLocal": monitor_scale},
             "capabilities": {"apply": apply_cap, "reasons": reasons},
@@ -257,7 +369,7 @@ class MonitorsModule:
 
     def validate(self, ctx: Any, draft: dict[str, Any], status: Status) -> ValidationResult:
         issues: list[ValidationIssue] = []
-        allowed = {"schemaVersion", "action", "profileId", "profile", "assignments", "override", "acknowledgedWarnings"}
+        allowed = {"schemaVersion", "action", "profileId", "profile", "assignments", "override", "acknowledgedWarnings", "_planContext"}
         for key in sorted(set(draft) - allowed):
             issues.append(ValidationIssue("validation_failed", f"Unknown draft field: {key}", f"/{key}", "error"))
         if draft.get("schemaVersion", draft.get("version")) != 1:
@@ -284,6 +396,14 @@ class MonitorsModule:
             issues.append(ValidationIssue("validation_failed", "A supported override is required", "/override", "error"))
         errors = [item for item in issues if item.severity == "error"]
         if action == "activate" and not errors:
+            plan_context = draft.get("_planContext")
+            now = ctx.clock.now()
+            if plan_context is None:
+                plan_context = _activation_plan_context(now)
+            if not _valid_activation_plan_context(plan_context, now):
+                issues.append(ValidationIssue("validation_failed", "Invalid internal monitor plan context", "/_planContext", "error"))
+            else:
+                normalized["_planContext"] = dict(plan_context)
             rendered = self._render_for_validation(normalized, status)
             if rendered is not None:
                 luac = ctx.capabilities.get("luac")
@@ -293,6 +413,8 @@ class MonitorsModule:
                         issues.append(ValidationIssue("unsupported_config", result.stderr.strip() or "Generated monitor Lua failed luac -p", "/profile", "error"))
                 else:
                     issues.append(ValidationIssue("monitors_no_lua_check", "luac is unavailable; generated Lua was not syntax checked", "/profile", "warning"))
+        elif "_planContext" in draft:
+            issues.append(ValidationIssue("validation_failed", "Internal monitor plan context is only valid for activation", "/_planContext", "error"))
         errors = [item for item in issues if item.severity == "error"]
         return ValidationResult(not errors, tuple(issues), normalized if not errors else None)
 
@@ -411,7 +533,10 @@ class MonitorsModule:
         if loader_state != "present":
             operations.append(ops.ReplaceManagedBlock(ctx, paths["host"], "MONITORS", 1, ownership.LOADER_BODY, "Install monitor loader"))
 
-        confirm_by = int((ctx.clock.now() + timedelta(seconds=180)).timestamp())
+        plan_context = draft.get("_planContext")
+        if plan_context is None:
+            plan_context = _activation_plan_context(ctx.clock.now())
+        confirm_by = plan_context["confirmBy"]
         guarded = lua_render.render(value, assignment_map, outputs, confirm_by)
         unguarded = lua_render.render(value, assignment_map, outputs)
         untoggled_expected = _expected_topology(value, assignment_map, {})
@@ -428,7 +553,7 @@ class MonitorsModule:
 
         activation_digest = hashlib.sha256(json.dumps({"profile": value, "assignments": assignment_map, "rules": _sha256(unguarded.encode())}, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         pointer = {"schemaVersion": 1, "profileId": value["id"], "planDigest": activation_digest,
-                   "appliedAt": ctx.clock.now_iso(), "rulesSha256": _sha256(unguarded.encode()), "assignments": assignment_map}
+                   "appliedAt": plan_context["appliedAt"], "rulesSha256": _sha256(unguarded.encode()), "assignments": assignment_map}
         operations.append(ops.WriteFileAtomic(ctx, paths["active"], profile.canonical(pointer), "0600", "Record active monitor profile"))
         claims = [ResourceClaim(f"file:{paths[key]}", "exclusive") for key in ("host", "generated", "active")]
         claims.append(ResourceClaim(f"file:{paths['profiles'] / (value['id'] + '.json')}", "exclusive"))

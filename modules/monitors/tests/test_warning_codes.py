@@ -11,7 +11,7 @@ from customization_center.core import Plan, Status, ops
 from customization_center.core.paths import Paths
 from customization_center.core.registry import load_registry
 
-from test_planner_extended import INVENTORY_TEXT, Journal, SAMPLE, context, status_for
+from .test_planner_extended import INVENTORY_TEXT, Journal, SAMPLE, context, status_for
 
 ROOT = Path(__file__).resolve().parents[3]
 

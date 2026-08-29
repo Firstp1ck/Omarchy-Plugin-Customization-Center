@@ -195,7 +195,8 @@ def test_registered_module_contract(module_id, isolated_home, request):
     entry = registry.view.entry(module_id); module = entry.module
     assert module.id == directory.name == metadata["id"]
     sample = json.loads((directory / "tests/fixtures/sample-draft.json").read_text())
-    before = {str(p): (p.stat().st_mode, p.read_bytes()) for p in isolated_home.rglob("*") if p.is_file()}
+    before = {str(p): (p.stat().st_mode, p.read_bytes()) for p in isolated_home.rglob("*")
+              if p.is_file() and not p.is_relative_to(paths.cache)}
     status = module.status(build_context(module_id, "read", paths=paths, registry=registry.view, plugin_dir=ROOT))
     if "baseRevision" in sample:
         sample["baseRevision"] = status.revision
@@ -203,8 +204,10 @@ def test_registered_module_contract(module_id, isolated_home, request):
     validation = module.validate(build_context(module_id, "validate", paths=paths, registry=registry.view, plugin_dir=ROOT), sample, status)
     assert validation.ok and validation.normalized_draft is not None and capabilities.module_id == module_id
     plan = module.plan(build_context(module_id, "plan", paths=paths, registry=registry.view, plugin_dir=ROOT), validation.normalized_draft, status)
-    after = {str(p): (p.stat().st_mode, p.read_bytes()) for p in isolated_home.rglob("*") if p.is_file()}
+    after = {str(p): (p.stat().st_mode, p.read_bytes()) for p in isolated_home.rglob("*")
+             if p.is_file() and not p.is_relative_to(paths.cache)}
     assert before == after
+    assert all(item.is_relative_to(paths.cache) for item in paths.cache.rglob("*") if item.is_file())
     status_schema = json.loads((directory / metadata["statusSchema"]).read_text())
     validate(status.data, status_schema, "status")
     declared = set(plan.requires_confirmation)

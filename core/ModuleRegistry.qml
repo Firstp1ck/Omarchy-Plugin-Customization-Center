@@ -184,6 +184,22 @@ Item {
                 registry.draftStore.applyPatch(registry.selectedModuleId, patch)
         }
         function onRequestNavigate(moduleId, payload) { registry.select(moduleId, payload) }
+        function onRequestRefresh() { registry.refreshStatus(registry.selectedModuleId) }
+        function onRequestAbandon(transactionId) {
+            if (!registry.backendClient)
+                return
+            registry.backendClient.abandon(transactionId, function() {
+                registry.refreshStatus(registry.selectedModuleId)
+            })
+        }
+    }
+
+    Connections {
+        target: backendClient
+        ignoreUnknownSignals: true
+        function onPendingHandoffReconciled(transactionId, result) {
+            registry.refreshStatus(registry.selectedModuleId)
+        }
     }
 
     Connections {

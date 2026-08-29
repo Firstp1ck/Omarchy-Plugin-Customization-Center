@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import customization_center.modules as registered_modules
@@ -46,6 +48,12 @@ def test_wrapped_remove_handoff_launches_exact_argv_and_reconciles(plugins_backe
     handoff = paths.state / "handoffs" / f"{tx.id}.json"
     handoff.parent.mkdir(parents=True, exist_ok=True)
     handoff.write_text('{"exitCode":0,"finishedAt":"2026-01-01T00:00:00Z"}\n')
+    completed = subprocess.run([str(ROOT / "backend/ccctl"), "status", "plugins"], cwd=ROOT,
+        env=dict(os.environ), text=True, capture_output=True, timeout=15)
+    assert completed.returncode == 0, completed.stderr
+    envelope = json.loads(completed.stdout.splitlines()[-1])
+    pending = envelope["data"]["pendingHandoffs"]
+    assert len(pending) == 1 and pending[0]["id"] == tx.id and pending[0]["sentinelExists"] is True
     removed["value"] = True
     reconciled = executor.reconcile(tx.id)
     assert reconciled.state == "committed"

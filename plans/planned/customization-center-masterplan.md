@@ -1,6 +1,6 @@
 # Omarchy Customization Center master plan
 
-Status: in progress. Verified against `omarchy-fork` at commit `71b0887c` (`created CODE_OF_CONDUCT.md`), Hyprland 0.56.2, Python 3.14.7 on the development host.
+Status: source implementation complete; live desktop and VM release acceptance pending. The design baseline was verified against `omarchy-fork` at commit `71b0887c`, Hyprland 0.56.2, and Python 3.14.7 on the development host.
 
 ## Execution record
 
@@ -8,7 +8,17 @@ Classification: complex. The feature crosses the QML shell, Python transaction c
 
 Integration owner: the active parent Pi session. Workers may edit only their assigned paths. The integration owner alone updates this plan, the module registry, shared documentation, the final report, and plan status.
 
-Continuation base: repository commit `71315e4`. Core, menu, defaults, monitors, themes, and keybindings have implementation commits. Defaults and themes remain blocked by independent review findings. Bar, plugins, and modes are not implemented. The feature is incomplete.
+Continuation base: repository commit `cd80826d2f9cf7575a41dbe411bddcf0da58a782`. The cumulative integration changes remain uncommitted so the parent session can review and integrate them as one release candidate. All eight modules are registered and implemented.
+
+Current checkpoint:
+
+- The transaction core records in-flight forward and inverse operations, reconciles only exact post-images, resumes partial rollback without repeating completed inverses, and blocks ambiguous external effects.
+- Directory replacement rollback binds the expected staged image, observed installed image, raw forward result, original target image, and generated previous-directory identity before undo. Missing, legacy, contradictory, or changed evidence fails closed.
+- Monitor mode caches are display-only. Plugin handoffs retain registry fallback polling. Mode imports rewrite renamed monitor-profile references.
+- Reviewed drafts carry one validated plan context. Monitor activation rejects stale contexts; modes export and theme save reuse their reviewed timestamps. `ApplyBar.qml` applies the exact normalized draft that produced the reviewed plan.
+- The canonical test command collected and passed 511 tests. One QML runtime test skipped because the required Quickshell/Hyprland runtime is unavailable. `git diff --check`, staged-file, bytecode, and pytest-cache checks passed.
+- Three fresh provider-distinct final reviews approved the source candidate. Core review reported 94/100 confidence, module integration 87/100, and release/report truthfulness 88/100. No P0 or P1 remains. Reviewers retained the documented cross-filesystem residue and unavailable runtime checks as P2 notes.
+- Live Quickshell/Hyprland desktop checks, the `omarchy-iso-test` VM matrix, and the manual TTY recovery drill remain release gates. This plan stays under `plans/planned/` until those checks pass.
 
 Approved contract corrections:
 
@@ -19,12 +29,12 @@ Approved contract corrections:
 
 Execution waves:
 
-1. `CORE-ROLLBACK-01`: generic verification persistence, safe abandon, inverse dependency ordering, schemas, and core tests. Handoff: `reports/handoffs/core-rollback-01.md`.
-2. `DEFAULTS-HARDEN-01` and `THEMES-HARDEN-01`: module-only corrections after the core wave. Handoffs: `reports/handoffs/defaults-harden-01.md` and `reports/handoffs/themes-harden-01.md`.
-3. `BAR-IMPLEMENT-01`, then `PLUGINS-IMPLEMENT-01`, then `MODES-IMPLEMENT-01`, preserving the dependency order in the roadmap. Each gets a unique handoff under `reports/handoffs/`.
-4. Integration, monitor cache completion, cross-workstream validation, two fresh provider-distinct reviews, finding disposition, VM checks, and `reports/customization-center-implementation.html`.
+1. Complete. `CORE-ROLLBACK-01` delivered generic verification persistence, safe abandon, inverse dependency ordering, schemas, and core tests. Handoff: `reports/handoffs/core-rollback-01.md`.
+2. Complete. `DEFAULTS-HARDEN-01` and `THEMES-HARDEN-01` closed their module review findings. Handoffs: `reports/handoffs/defaults-harden-01.md` and `reports/handoffs/themes-harden-01.md`.
+3. Complete. `BAR-IMPLEMENT-01`, `PLUGINS-IMPLEMENT-01`, and `MODES-IMPLEMENT-01` landed in dependency order. Handoffs are under `reports/handoffs/`.
+4. Source-complete. Integration, monitor cache work, cross-workstream validation, review finding disposition, and `reports/customization-center-implementation.html` are complete. Live desktop, VM, and TTY recovery checks remain.
 
-The unresolved release choices near the end of this plan are deferred to hardening. They block release claims, not the core and module corrections above.
+The unresolved release choices near the end of this plan block a tagged release claim, not source acceptance.
 
 ## Goal
 
@@ -1147,7 +1157,7 @@ The developer desktop for daily checks; the `omarchy-iso-test` VM for the releas
 | The bar file route races the shell | A widget persisting its own inline state between the read and the write is lost | Revision covers `listShellConfig` and the file hash; the write is refused when either moved, when the file does not parse, or when the shell is down; verify re-reads after `reloadConfig`; upstream `applyBarConfig` would retire the route |
 | Menu sparse merge is not fixed upstream | Shipped entries cannot be overridden field by field | Custom entries only; optional explicit "Shadow entire shipped entry" with every pinned field listed |
 | A monitor apply hides the UI | The user cannot confirm | Static geometry checks, `TimedConfirmation` armed before the write, visible-root verification, external unit, countdown on every screen |
-| Rollback conflicts with a concurrent edit | Rollback clobbers user work | `WriteFileAtomic` inverse checks the post-write hash and skips with `rollback_conflict`; managed-block inverses replace only the block |
+| Rollback conflicts with a concurrent edit | Rollback clobbers user work | `WriteFileAtomic` checks its post-write hash. Managed-block inverses require the exact managed post-image. Directory replacement undo binds the staged, installed, raw-result, original-target, and previous-directory evidence; any mismatch preserves both versions and ends in `rollback_failed`. |
 | Theme activation has side effects rollback cannot undo | Applications keep a retinted state | Disclosed in review; rollback restores authoritative theme state and says what it did not verify |
 | Omarchy command output changes across versions | Adapters misparse | Probes for specific capabilities, `omarchy commands --json` drift checks in defaults, recorded-output fixtures re-recorded per supported commit, fail closed on unknown output |
 | The composed-plan claim model misses a shared resource | Two segments write the same thing | Claims are part of the contract test; the modes plan rejects bar-kind ids in `plugins.states`; the global lock serializes everything else |
@@ -1171,7 +1181,7 @@ The developer desktop for daily checks; the `omarchy-iso-test` VM for the releas
 - Coding agents are excluded from desktop modes.
 - Desktop modes are manual in the first release.
 
-## Decisions still needed before implementation
+## Decisions still needed before release
 
 1. Public repository URL for `omarchy plugin add`.
 2. Whether the first release tracks Omarchy `master` at a pinned commit or waits for a tagged release; the capability probes make either workable, but the README needs one answer.
@@ -1198,3 +1208,5 @@ The Customization Center is complete when:
 - Visual verification passes on the developer desktop and the acceptance suite passes in the VM.
 - `docs/recovery.md` has been executed from a TTY for every `rollback_failed` fixture.
 - This plan moves from `plans/planned/` to `plans/archive/` only after implementation and verification are finished.
+
+Current disposition: the source and isolated test gates pass. The live desktop, VM matrix, and manual TTY recovery items above are not available in the current environment, so the definition of done is not yet fully met and the plan remains in `plans/planned/`.

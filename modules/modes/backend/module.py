@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,9 +15,16 @@ ACTIONS={"save","delete","apply","import","export"}
 OUTPUT_PATTERN=re.compile(r"^[a-z0-9][a-z0-9._-]{0,127}\.json$")
 
 
+def _valid_iso_timestamp(value:Any)->bool:
+    if not isinstance(value,str) or not 1<=len(value)<=64: return False
+    try: parsed=datetime.fromisoformat(value.replace("Z","+00:00"))
+    except ValueError: return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
 def _envelope_issues(draft: Any) -> list[ValidationIssue]:
     if not isinstance(draft,dict): return [ValidationIssue("validation_failed","Draft must be an object","","error")]
-    issues=[]; allowed={"schemaVersion","action","mode","import","export","expected"}
+    issues=[]; allowed={"schemaVersion","action","mode","import","export","expected","_planContext"}
     for key in sorted(set(draft)-allowed): issues.append(ValidationIssue("validation_failed",f"Unknown draft field: {key}",f"/{key}","error"))
     if draft.get("schemaVersion")!=1: issues.append(ValidationIssue("modes_unsupported_version","Draft schemaVersion must be 1","/schemaVersion","error"))
     if draft.get("action") not in ACTIONS: issues.append(ValidationIssue("validation_failed","Unknown modes action","/action","error"))
@@ -92,6 +100,14 @@ class ModesModule:
         if action=="export":
             output=(draft.get("export") or {}).get("outputName") if isinstance(draft.get("export"),dict) else None
             if not isinstance(output,str) or not OUTPUT_PATTERN.fullmatch(output) or ".." in output: issues.append(ValidationIssue("modes_invalid_id","Export outputName must be a safe .json file name","/export/outputName","error"))
+            plan_context=draft.get("_planContext")
+            if plan_context is None: plan_context={"exportedAt":ctx.clock.now_iso()}
+            valid_context=(isinstance(plan_context,dict) and set(plan_context)=={"exportedAt"} and
+                           _valid_iso_timestamp(plan_context.get("exportedAt")))
+            if not valid_context: issues.append(ValidationIssue("validation_failed","Invalid internal mode plan context","/_planContext","error"))
+            elif normalized is not None: normalized["_planContext"]=dict(plan_context)
+        elif isinstance(draft,dict) and "_planContext" in draft:
+            issues.append(ValidationIssue("validation_failed","Internal mode plan context is only valid for export","/_planContext","error"))
         errors=any(item.severity=="error" for item in issues)
         return ValidationResult(not errors,tuple(issues),None if errors else normalized,details)
 
@@ -122,7 +138,7 @@ class ModesModule:
                         if not machine:
                             for item in data.get("outputs",[]): item.get("identity",{}).pop("connectorFallback",None)
                         artifacts.append({"module":"monitors","kind":"monitor-profile","id":data["id"],"digest":store.digest(data),"data":data,"machineSpecific":machine})
-            document={"bundleVersion":1,"exportedBy":{"application":"firstpick.customization-center","version":"0.1.0"},"exportedAt":ctx.clock.now_iso(),"mode":mode,"artifacts":artifacts,"externalReferences":references}
+            document={"bundleVersion":1,"exportedBy":{"application":"firstpick.customization-center","version":"0.1.0"},"exportedAt":draft["_planContext"]["exportedAt"],"mode":mode,"artifacts":artifacts,"externalReferences":references}
             target=ctx.paths.exports/draft["export"]["outputName"]; operations=(ops.EnsureDirectory(ctx,target.parent,"0700","Ensure export directory"),ops.WriteFileAtomic(ctx,target,store.canonical(document),"0600",f"Export desktop mode {mode['id']}"))
             return Plan(self.id,status.revision,operations,(ResourceClaim(f"file:{target}","exclusive"),),f"Export desktop mode {mode['id']}",(),())
         if action=="import":
@@ -135,7 +151,15 @@ class ModesModule:
             operations,claims,segments=compose.import_artifacts(ctx,parsed,status,resolutions)
             mode=json.loads(json.dumps(parsed["mode"])); mode_resolution=resolutions.get("mode",{})
             if isinstance(mode_resolution,dict) and mode_resolution.get("action")=="rename": mode["id"]=mode_resolution.get("id",mode["id"]); mode["name"]=mode_resolution.get("name",mode["name"])
-            target=store.mode_path(ctx,mode["id"]); operations.extend((ops.EnsureDirectory(ctx,target.parent,"0700","Ensure desktop modes directory"),ops.WriteFileAtomic(ctx,target,store.canonical(mode),"0600",f"Import desktop mode {mode['id']}"))); claims.append(ResourceClaim(f"file:{target}","exclusive")); segments.append(PlanSegment("modes",status.revision,(operations[-1].id,)))
+            artifact_resolutions=resolutions.get("artifacts",{}) if isinstance(resolutions,dict) else {}
+            for artifact in parsed["artifacts"]:
+                key=f"{artifact['kind']}:{artifact['id']}"; resolution=artifact_resolutions.get(key,{})
+                if artifact["module"]=="monitors" and artifact["kind"]=="monitor-profile" and isinstance(resolution,dict) and resolution.get("action")=="rename":
+                    store.rewrite_monitor_profile_reference(mode,artifact["id"],resolution.get("id",artifact["id"]))
+            mode_issues,normalized_mode=store.validate_mode(mode)
+            if mode_issues or normalized_mode is None: raise CcError(mode_issues[0].code,mode_issues[0].message,{"issues":[item.to_json() for item in mode_issues]})
+            mode=normalized_mode
+            target=store.mode_path(ctx,mode["id"]); local_operations=(ops.EnsureDirectory(ctx,target.parent,"0700","Ensure desktop modes directory"),ops.WriteFileAtomic(ctx,target,store.canonical(mode),"0600",f"Import desktop mode {mode['id']}")); operations.extend(local_operations); claims.append(ResourceClaim(f"file:{target}","exclusive")); segments.append(PlanSegment("modes",status.revision,tuple(item.id for item in local_operations)))
             compose._check_claims(claims)
             return Plan(self.id,status.revision,tuple(operations),tuple(claims),f"Import desktop mode {mode['id']} as an inert draft",(),(),(),tuple(segments))
         raise CcError("validation_failed","Unsupported modes action")

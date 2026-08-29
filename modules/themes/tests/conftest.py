@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-pytest_plugins = ["tests.conftest"]
+from tests.conftest import fake_shell, isolated_home, stub_command
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT / "backend") not in sys.path:
@@ -18,7 +18,7 @@ from customization_center.core.registry import load_registry
 
 @pytest.fixture
 def fault_plan(isolated_home, monkeypatch):
-    path = isolated_home / "faults.json"
+    path = Paths.from_env().private_tmpfile("-faults.json")
 
     def arm(*hooks):
         path.write_text(json.dumps({"hooks": list(hooks)}), encoding="utf-8")

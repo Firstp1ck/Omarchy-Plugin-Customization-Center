@@ -60,6 +60,25 @@ def test_read_regular_is_bounded_and_rejects_symlinks_and_non_regular_files(isol
         paths.read_regular(regular, -1)
 
 
+def test_cache_json_write_is_atomic_bounded_and_cache_root_only(isolated_home):
+    paths = Paths.from_env()
+    target = paths.write_cache_json("monitor-inventory.json", {"observedAt": "now", "outputs": []})
+    assert target == paths.cache / "monitor-inventory.json"
+    assert target.stat().st_mode & 0o777 == 0o600
+    assert target.read_text() == '{"observedAt":"now","outputs":[]}\n'
+    for unsafe in ("../state.json", "/tmp/cache.json", "."):
+        with pytest.raises(CcError, match="Cache path"):
+            paths.write_cache_json(unsafe, {})
+    outside = isolated_home / "outside"
+    outside.mkdir()
+    linked = paths.cache / "linked"
+    linked.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(CcError, match="outside the cache root"):
+        paths.write_cache_json("linked/value.json", {})
+    with pytest.raises(CcError, match="1 MiB"):
+        paths.write_cache_json("large.json", {"value": "x" * (1024 * 1024)})
+
+
 def test_read_regular_detects_inode_change_between_lstat_and_open(isolated_home, monkeypatch):
     paths = Paths.from_env()
     target = isolated_home / "raced.bin"
