@@ -5,10 +5,12 @@ from customization_center.core.errors import CcError
 
 def test_types_round_trip_and_camel_case():
     warning = Warning("menu_notice", "notice", ack=True)
-    operation = Operation("menu.1", "menu", "WriteFileAtomic", {"path": "/x"}, "write", (), ("/x",))
+    operation = Operation("menu.1", "menu", "WriteFileAtomic", {"path": "/x"}, "write", (), ("/x",),
+                          inverse_after=("menu.0",))
     plan = Plan("menu", "r1", (operation,), (ResourceClaim("file:x", "exclusive"),), "summary", (warning,), ())
     assert Plan.from_json(plan.to_json()) == plan
     assert plan.to_json()["expectedRevision"] == "r1"
+    assert plan.to_json()["operations"][0]["inverseAfter"] == ["menu.0"]
     assert ValidationResult.from_json(ValidationResult(True, (ValidationIssue("menu_x", "x", "/x", "warning"),), {}).to_json()).ok
     assert VerifyResult.from_json(VerifyResult("pass", "full", "").to_json()).state == "pass"
     assert Status.from_json(Status("menu", "r", {}, (), 1).to_json()).module_id == "menu"

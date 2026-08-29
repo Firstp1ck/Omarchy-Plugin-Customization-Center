@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import json
 import os
 import secrets
@@ -109,6 +110,7 @@ class Executor:
                 gate_count += 1
             if operation.kind == "TerminalHandoff" and index != len(plan.operations) - 1:
                 raise CcError("unsupported_config", "TerminalHandoff must be the final operation")
+        self._validate_inverse_dependencies(plan.operations)
         if gate_count > 1:
             raise CcError("unsupported_config", "A plan may contain at most one TimedConfirmation")
         if gate_count and not self._ctx(plan.module_id, "read").capabilities.get("timed_confirmation").available:
@@ -133,6 +135,80 @@ class Executor:
         if missing:
             raise CcError("nonreversible_requires_confirmation", "Confirmation is required for non-reversible changes",
                           {"missingKeys": missing})
+
+    @staticmethod
+    def _validate_inverse_dependencies(operations: tuple[Operation, ...]) -> None:
+        positions = {operation.id: index for index, operation in enumerate(operations)}
+        successors: dict[str, list[str]] = {operation.id: [] for operation in operations}
+        for operation in operations:
+            if len(set(operation.inverse_after)) != len(operation.inverse_after):
+                raise CcError("unsupported_config", f"Operation {operation.id} has duplicate inverseAfter entries")
+            for dependency in operation.inverse_after:
+                if dependency not in positions:
+                    raise CcError("unsupported_config",
+                                  f"Operation {operation.id} inverseAfter names missing operation {dependency}")
+                successors[dependency].append(operation.id)
+
+        visiting: set[str] = set()
+        visited: set[str] = set()
+
+        def visit(operation_id: str) -> None:
+            if operation_id in visiting:
+                raise CcError("unsupported_config", "Operation inverseAfter dependencies contain a cycle")
+            if operation_id in visited:
+                return
+            visiting.add(operation_id)
+            for successor in successors[operation_id]:
+                visit(successor)
+            visiting.remove(operation_id)
+            visited.add(operation_id)
+
+        for operation in operations:
+            visit(operation.id)
+        for operation in operations:
+            for dependency in operation.inverse_after:
+                if positions[dependency] >= positions[operation.id]:
+                    raise CcError("unsupported_config",
+                                  f"Operation {operation.id} inverseAfter must name an earlier operation")
+        gate_index = next((index for index, operation in enumerate(operations)
+                           if operation.kind == "TimedConfirmation"), -1)
+        if gate_index >= 0:
+            for operation in operations[gate_index:]:
+                if any(positions[dependency] < gate_index for dependency in operation.inverse_after):
+                    raise CcError("unsupported_config",
+                                  f"Operation {operation.id} inverseAfter crosses the confirmation rollback boundary")
+
+    @staticmethod
+    def _inverse_order(plan: Plan, completed_operation_ids: Iterable[str]) -> tuple[Operation, ...]:
+        by_id = {operation.id: operation for operation in plan.operations}
+        reverse_completed: list[str] = []
+        seen: set[str] = set()
+        for operation_id in reversed(tuple(completed_operation_ids)):
+            if operation_id in by_id and operation_id not in seen:
+                reverse_completed.append(operation_id)
+                seen.add(operation_id)
+        rank = {operation_id: index for index, operation_id in enumerate(reverse_completed)}
+        indegree = {operation_id: 0 for operation_id in reverse_completed}
+        successors: dict[str, list[str]] = {operation_id: [] for operation_id in reverse_completed}
+        for operation_id in reverse_completed:
+            for dependency in by_id[operation_id].inverse_after:
+                if dependency not in indegree:
+                    continue
+                successors[dependency].append(operation_id)
+                indegree[operation_id] += 1
+        available = [(rank[operation_id], operation_id) for operation_id, count in indegree.items() if count == 0]
+        heapq.heapify(available)
+        ordered: list[Operation] = []
+        while available:
+            _, operation_id = heapq.heappop(available)
+            ordered.append(by_id[operation_id])
+            for successor in successors[operation_id]:
+                indegree[successor] -= 1
+                if indegree[successor] == 0:
+                    heapq.heappush(available, (rank[successor], successor))
+        if len(ordered) != len(reverse_completed):
+            raise CcError("unsupported_config", "Operation inverseAfter dependencies contain a cycle")
+        return tuple(ordered)
 
     def _status_revisions(self, module_id: str, plan: Plan) -> None:
         for segment in plan.segments:
@@ -393,9 +469,9 @@ class Executor:
         skipped = list(tx.skipped_inverse_ids)
         deferred_reloads: list[tuple[Operation, str]] = []
         restored_hypr_operation_id: str | None = None
-        for operation_id in reversed(tx.completed_operation_ids):
-            operation = operations.get(operation_id)
-            if operation is None or operation.kind == "TimedConfirmation":
+        for operation in self._inverse_order(tx.plan, tx.completed_operation_ids):
+            operation_id = operation.id
+            if operation.kind == "TimedConfirmation":
                 continue
             try:
                 self.faults.hit(f"before_inverse:{operation_id}")
@@ -615,25 +691,28 @@ class Executor:
         gate_index = next((index for index, item in enumerate(original.plan.operations)
                            if item.kind == "TimedConfirmation"), -1)
         ordered: list[tuple[Operation, Operation]] = []
+        completed_ids = original.completed_operation_ids or tuple(item.id for item in original.plan.operations)
+        inverse_order = self._inverse_order(original.plan, completed_ids)
+        positions = {operation.id: index for index, operation in enumerate(original.plan.operations)}
 
         def append_inverses(items: Iterable[Operation]) -> None:
-            for forward in reversed(tuple(items)):
+            for forward in items:
                 for inverse in ops.build_inverse(forward, original_exec, original_results.get(forward.id)):
                     ordered.append((inverse, forward))
 
         if gate_index >= 0:
-            append_inverses(original.plan.operations[gate_index + 1:])
+            append_inverses(item for item in inverse_order if positions[item.id] > gate_index)
             gate = original.plan.operations[gate_index]
             gate_inverse = next(iter(ops.build_inverse(gate, original_exec, original_results.get(gate.id))), gate)
             ordered.append((gate_inverse, gate))
-            append_inverses(original.plan.operations[:gate_index])
+            append_inverses(item for item in inverse_order if positions[item.id] < gate_index)
         else:
-            append_inverses(original.plan.operations)
+            append_inverses(inverse_order)
 
         rebuilt: list[Operation] = []
         for sequence, (inverse, forward) in enumerate(ordered, 1):
             rebuilt.append(replace(inverse, id=f"{original.module_id}.{sequence:04d}",
-                                   module_id=original.module_id, inverse=forward))
+                                   module_id=original.module_id, inverse=forward, inverse_after=()))
         inverse_plan = Plan(original.module_id, current_revision, tuple(rebuilt), original.plan.claims,
                             f"Undo: {original.plan.summary}", (), (), original.plan.residual_side_effects,
                             (), "")
@@ -723,7 +802,12 @@ class Executor:
         if verified.state == "pending":
             return tx
         if verified.state == "fail":
-            return self._rollback_record(tx, "handoff_failed")
+            error = {"code": verified.code or "verification_failed",
+                     "message": verified.reason or "Handoff verification failed",
+                     "data": dict(verified.evidence),
+                     "at": self._ctx(tx.module_id, "read").clock.now_iso()}
+            tx = self._save(tx, verify=verified, errors=tx.errors + (error,))
+            return self._rollback_record(tx, "verification")
         status = self.registry.module(tx.module_id).status(self._ctx(tx.module_id, "read"))
         return self._save(tx, state="committed", after_revision=status.revision, verify=verified)
 
@@ -744,7 +828,7 @@ class Executor:
             if tx.state != "pending_handoff":
                 raise CcError("transaction_state_invalid", "Only a pending handoff can be abandoned")
             self._remove_tokens(txid)
-            return self._save(tx, state="rolled_back", reason="user")
+            return self._rollback_record(tx, "user")
         finally:
             apply_lock.release()
 

@@ -115,6 +115,60 @@ def test_duplicate_exclusive_claims_fail_before_backup(isolated_home):
     assert caught.value.code == "resource_conflict" and not executor.backups.root.exists()
 
 
+def _command_operation(operation_id, *, inverse_after=()):
+    return Operation(operation_id, "hello", "RunCommand",
+        {"argv": ["true"], "timeout_s": 1.0, "expect_exit": 0, "capture_limit": 16,
+         "env_extra": {}, "stdin": None, "wait_policy": "exit"}, "run", (), (), 1.0, None,
+        tuple(inverse_after))
+
+
+def test_inverse_after_validation_order_partial_completion_and_digest(isolated_home):
+    paths = Paths.from_env(); executor, _ = _executor(paths)
+    first = _command_operation("hello.0001")
+    second = _command_operation("hello.0002", inverse_after=(first.id,))
+    third = _command_operation("hello.0003", inverse_after=(second.id,))
+    plan = Plan("hello", "r", (first, second, third), (), "ordered", (), ())
+    executor._validate_plan(plan, ())
+    assert [item.id for item in executor._inverse_order(plan, (first.id, second.id, third.id))] == [
+        first.id, second.id, third.id]
+    assert [item.id for item in executor._inverse_order(plan, (first.id, third.id))] == [third.id, first.id]
+    assert [item.id for item in executor._inverse_order(plan, (second.id, third.id))] == [second.id, third.id]
+    plain = replace(plan, operations=tuple(replace(item, inverse_after=()) for item in plan.operations))
+    assert [item.id for item in executor._inverse_order(plain, (first.id, second.id, third.id))] == [
+        third.id, second.id, first.id]
+    assert Executor.digest(plan) != Executor.digest(plain)
+    assert Plan.from_json(plan.to_json()) == plan
+    composed_first = replace(first, id="first.0001", module_id="first")
+    composed_second = replace(second, id="second.0001", module_id="second",
+                              inverse_after=(composed_first.id,))
+    composed = replace(plan, operations=(composed_first, composed_second),
+                       segments=(PlanSegment("first", "r1", (composed_first.id,)),
+                                 PlanSegment("second", "r2", (composed_second.id,))))
+    executor._validate_plan(composed, ())
+    assert [item.id for item in executor._inverse_order(
+        composed, (composed_first.id, composed_second.id))] == [composed_first.id, composed_second.id]
+
+    missing = replace(plan, operations=(first, replace(second, inverse_after=("hello.9999",)), third))
+    with pytest.raises(CcError) as caught:
+        executor._validate_plan(missing, ())
+    assert "missing operation" in caught.value.message
+    forward = replace(plan, operations=(replace(first, inverse_after=(second.id,)),
+                                        replace(second, inverse_after=()), third))
+    with pytest.raises(CcError) as caught:
+        executor._validate_plan(forward, ())
+    assert "earlier operation" in caught.value.message
+    cycle = replace(plan, operations=(replace(first, inverse_after=(second.id,)),
+                                      replace(second, inverse_after=(first.id,)), third))
+    with pytest.raises(CcError) as caught:
+        executor._validate_plan(cycle, ())
+    assert "cycle" in caught.value.message
+    gate = Operation("hello.0002", "hello", "TimedConfirmation", {"seconds": 1}, "gate", (), (), 1.0)
+    post_gate = replace(third, inverse_after=(first.id,))
+    with pytest.raises(CcError) as caught:
+        executor._validate_inverse_dependencies((first, gate, post_gate))
+    assert "confirmation rollback boundary" in caught.value.message
+
+
 def test_user_rollback_preserves_concurrent_file_edit(isolated_home, stub_command):
     paths, executor, status, draft = _hello_setup(stub_command)
     committed = executor.apply("hello", draft, status.revision)
@@ -230,6 +284,101 @@ class FixtureRegistry:
     def entry(self, module_id):
         self.module(module_id)
         return SimpleNamespace(metadata={"extraWritablePaths": [], "draftSchema": "tests/fixtures/any-draft-v1.json"}, directory=ROOT)
+
+
+class InverseOrderModule:
+    id = "ordered"
+    schema_version = 1
+    def capabilities(self, ctx): return Capabilities(self.id, (), ctx.clock.now_iso())
+    def status(self, ctx): return Status(self.id, "stable", {}, (), 1)
+    def validate(self, ctx, draft, status): return ValidationResult(True, (), draft)
+    def plan(self, ctx, draft, status):
+        first = ops.RunCommand(ctx, ["ordered-command", "set-a"], inverse=["ordered-command", "undo-a"])
+        second = ops.RunCommand(ctx, ["ordered-command", "set-b"], inverse=["ordered-command", "undo-b"],
+                                inverse_after=(first.id,))
+        third = ops.RunCommand(ctx, ["ordered-command", "set-c"], inverse=["ordered-command", "undo-c"],
+                               inverse_after=(second.id,))
+        return Plan(self.id, status.revision, (first, second, third), (), "ordered", (), ())
+    def verify(self, ctx, plan, status, results): return VerifyResult("pass", "full", "")
+
+
+def test_inverse_after_controls_failure_recovery_and_committed_undo(isolated_home, stub_command):
+    stub_command("ordered-command", {"exit_code": 0})
+    paths = Paths.from_env(); registry = FixtureRegistry(InverseOrderModule())
+    executor = Executor(ROOT, registry, paths, ROOT / "backend/ccctl")
+
+    def undo_calls():
+        return [call[1] for call in stub_command.calls("ordered-command") if call[1].startswith("undo-")]
+
+    executor.faults.hooks.add("before_verify")
+    with pytest.raises(CcError):
+        executor.apply("ordered", {"schemaVersion": 1}, "stable")
+    assert undo_calls()[-3:] == ["undo-a", "undo-b", "undo-c"]
+
+    committed = executor.apply("ordered", {"schemaVersion": 1}, "stable")
+    executor.rollback(committed.id)
+    assert undo_calls()[-3:] == ["undo-a", "undo-b", "undo-c"]
+
+    executor.faults.hooks.add("kill_process_at:before_verify")
+    with pytest.raises(SystemExit):
+        executor.apply("ordered", {"schemaVersion": 1}, "stable")
+    executor.recover()
+    assert undo_calls()[-3:] == ["undo-a", "undo-b", "undo-c"]
+    recovered = executor.journal.history(module="ordered", limit=1)[0]
+    assert recovered.state == "rolled_back" and recovered.reason == "recovery"
+
+
+class MixedHandoffModule:
+    id = "mixed"
+    schema_version = 1
+    def __init__(self): self.fail_verification = False
+    def capabilities(self, ctx): return Capabilities(self.id, (), ctx.clock.now_iso())
+    def status(self, ctx): return Status(self.id, "stable", {}, (), 1)
+    def validate(self, ctx, draft, status): return ValidationResult(True, (), draft)
+    def plan(self, ctx, draft, status):
+        setter = ops.RunCommand(ctx, ["mixed-command", "set"], inverse=["mixed-command", "undo"])
+        handoff = ops.TerminalHandoff(ctx, ["handoff-command"], "Handoff", wrapped=True)
+        return Plan(self.id, status.revision, (setter, handoff), (), "mixed", (), (handoff.id,))
+    def verify(self, ctx, plan, status, results):
+        if self.fail_verification:
+            return VerifyResult("fail", "full", "The application is installed but was not set",
+                                "defaults_installed_not_set", {"category": "terminal", "choice": "kitty"})
+        return VerifyResult("pending", "full", "Waiting")
+
+
+def test_reconcile_persists_verification_failure_and_abandon_rolls_back(isolated_home, stub_command):
+    undo_fails = {"value": False}
+    stub_command("omarchy-launch-floating-terminal-with-presentation", {"exit_code": 0})
+    stub_command("handoff-command", {"exit_code": 0})
+    stub_command("mixed-command", lambda request: {"exit_code": 7, "stderr": "undo failed"}
+                 if request["argv"][1:] == ["undo"] and undo_fails["value"] else {"exit_code": 0})
+    paths = Paths.from_env(); module = MixedHandoffModule(); registry = FixtureRegistry(module)
+    executor = Executor(ROOT, registry, paths, ROOT / "backend/ccctl")
+
+    pending = executor.apply("mixed", {"schemaVersion": 1}, "stable", confirmations=("mixed.0003",))
+    abandoned = executor.abandon(pending.id)
+    assert abandoned.state == "rolled_back" and abandoned.reason == "user"
+    assert any(entry.get("inverseOf") == "mixed.0001" for entry in abandoned.command_log)
+    assert {item["operationId"] for item in abandoned.skipped_inverse_ids} == {"mixed.0003"}
+
+    module.fail_verification = True
+    pending = executor.apply("mixed", {"schemaVersion": 1}, "stable", confirmations=("mixed.0003",))
+    sentinel = paths.state / "handoffs" / f"{pending.id}.json"
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    sentinel.write_text('{"exitCode":0,"finishedAt":"2024-01-01T00:00:00Z"}')
+    reconciled = executor.reconcile(pending.id)
+    assert reconciled.state == "rolled_back" and reconciled.reason == "verification"
+    assert reconciled.verify == VerifyResult("fail", "full", "The application is installed but was not set",
+                                             "defaults_installed_not_set",
+                                             {"category": "terminal", "choice": "kitty"})
+    assert reconciled.errors[-1]["code"] == "defaults_installed_not_set"
+    assert reconciled.errors[-1]["data"] == {"category": "terminal", "choice": "kitty"}
+
+    module.fail_verification = False; undo_fails["value"] = True
+    pending = executor.apply("mixed", {"schemaVersion": 1}, "stable", confirmations=("mixed.0003",))
+    failed = executor.abandon(pending.id)
+    assert failed.state == "rollback_failed" and failed.reason == "user"
+    assert failed.rollback_errors[-1]["operationId"] == "mixed.0001"
 
 
 def test_gate_confirm_token_and_timeout(isolated_home, stub_command, monkeypatch):

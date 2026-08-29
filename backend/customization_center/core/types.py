@@ -151,6 +151,7 @@ class Operation(JsonType):
     backup_paths: tuple[str, ...]
     timeout_s: float = 30.0
     detail: dict[str, Any] | None = None
+    inverse_after: tuple[str, ...] = ()
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "Operation":
@@ -163,7 +164,8 @@ class Operation(JsonType):
             inverse = None
         return cls(str(data["id"]), str(_get(data, "module_id")), str(data["kind"]), dict(data.get("params", {})),
                    str(data.get("summary", "")), inverse, tuple(_get(data, "backup_paths", ())),
-                   float(_get(data, "timeout_s", 30.0)), data.get("detail"))
+                   float(_get(data, "timeout_s", 30.0)), data.get("detail"),
+                   tuple(str(item) for item in _get(data, "inverse_after", ())))
 
 
 @dataclass(frozen=True)

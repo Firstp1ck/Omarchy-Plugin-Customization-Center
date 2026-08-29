@@ -15,7 +15,8 @@
     "operation": {"type": "object", "required": ["id", "moduleId", "kind", "params", "summary", "inverse", "backupPaths", "timeoutS", "detail"], "additionalProperties": false,
       "properties": {"id": {"type": "string"}, "moduleId": {"type": "string"}, "kind": {"enum": ["WriteFileAtomic", "ReplaceManagedBlock", "EnsureDirectory", "ReplaceDirectoryAtomic", "RunCommand", "RestoreBackup", "RemoveFile", "ShellIpc", "HyprctlReload", "TimedConfirmation", "TerminalHandoff"]}, "params": {"type": "object"}, "summary": {"type": "string"},
       "inverse": {"oneOf": [{"$ref": "#/$defs/operation"}, {"type": "array", "items": {"$ref": "#/$defs/operation"}}, {"type": "null"}]},
-      "backupPaths": {"type": "array", "items": {"type": "string"}}, "timeoutS": {"type": "number", "exclusiveMinimum": 0}, "detail": {"type": ["object", "null"]}}},
+      "backupPaths": {"type": "array", "items": {"type": "string"}}, "timeoutS": {"type": "number", "exclusiveMinimum": 0}, "detail": {"type": ["object", "null"]},
+      "inverseAfter": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}}},
     "claim": {"type": "object", "required": ["key", "access"], "additionalProperties": false, "properties": {"key": {"type": "string"}, "access": {"enum": ["exclusive", "shared"]}}},
     "segment": {"type": "object", "required": ["moduleId", "expectedRevision", "operationIds"], "additionalProperties": false, "properties": {"moduleId": {"type": "string"}, "expectedRevision": {"type": "string"}, "operationIds": {"type": "array", "items": {"type": "string"}}}},
     "warning": {"type": "object", "required": ["code", "message", "path", "recovery", "ack"], "additionalProperties": false, "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "path": {"type": "string"}, "recovery": {"type": "string"}, "ack": {"type": "boolean"}}}

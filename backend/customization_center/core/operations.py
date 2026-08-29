@@ -33,9 +33,10 @@ def _next_id(ctx: Any) -> str:
 
 def _operation(ctx: Any, kind: str, params: dict[str, Any], summary: str,
                inverse: Operation | tuple[Operation, ...] | None, backup_paths: tuple[str, ...] = (),
-               timeout_s: float = 30.0, detail: dict | None = None) -> Operation:
+               timeout_s: float = 30.0, detail: dict | None = None,
+               inverse_after: tuple[str, ...] = ()) -> Operation:
     return Operation(_next_id(ctx), ctx.module_id, kind, params, summary, inverse,
-                     backup_paths, float(timeout_s), detail)
+                     backup_paths, float(timeout_s), detail, tuple(inverse_after))
 
 
 def _mode(value: str | int | None) -> str | None:
@@ -50,21 +51,22 @@ def _mode(value: str | int | None) -> str | None:
 def WriteFileAtomic(ctx: Any, path: str | Path, content: str | bytes, mode: str | int | None,
                     summary: str = "Write file", inverse: Operation | None = None, *,
                     backup_paths: tuple[str, ...] = (), timeout_s: float = 30.0,
-                    detail: dict | None = None) -> Operation:
+                    detail: dict | None = None, inverse_after: tuple[str, ...] = ()) -> Operation:
     encoded: Any = content if isinstance(content, str) else {"base64": base64.b64encode(content).decode("ascii")}
     target = str(Path(path).absolute())
     operation_id = _next_id(ctx)
     inv = inverse or RestoreBackup(ctx, target)
     return Operation(operation_id, ctx.module_id, "WriteFileAtomic",
                      {"path": target, "content": encoded, "mode": _mode(mode)}, summary, inv,
-                     backup_paths, float(timeout_s), detail)
+                     backup_paths, float(timeout_s), detail, tuple(inverse_after))
 
 
 def ReplaceManagedBlock(ctx: Any, path: str | Path, name: str | None = None, version: int = 1,
                         body: str | None = None, summary: str = "Replace managed block",
                         inverse: Operation | None = None, *, begin_marker: str | None = None,
                         end_marker: str | None = None, backup_paths: tuple[str, ...] = (),
-                        timeout_s: float = 30.0, detail: dict | None = None) -> Operation:
+                        timeout_s: float = 30.0, detail: dict | None = None,
+                        inverse_after: tuple[str, ...] = ()) -> Operation:
     target = str(Path(path).absolute())
     operation_id = _next_id(ctx)
     params = {"path": target, "body": body}
@@ -78,33 +80,35 @@ def ReplaceManagedBlock(ctx: Any, path: str | Path, name: str | None = None, ver
     else:
         inv = inverse
     return Operation(operation_id, ctx.module_id, "ReplaceManagedBlock", params, summary, inv,
-                     backup_paths, float(timeout_s), detail)
+                     backup_paths, float(timeout_s), detail, tuple(inverse_after))
 
 
 def EnsureDirectory(ctx: Any, path: str | Path, mode: str | int = "0700", summary: str = "Ensure directory",
                     inverse: Operation | None = (), *, backup_paths: tuple[str, ...] = (),
-                    timeout_s: float = 30.0, detail: dict | None = None) -> Operation:
+                    timeout_s: float = 30.0, detail: dict | None = None,
+                    inverse_after: tuple[str, ...] = ()) -> Operation:
     # An empty inverse means the executor uses the created flag from the forward result.
     return _operation(ctx, "EnsureDirectory", {"path": str(Path(path).absolute()), "mode": _mode(mode)},
-                      summary, inverse, backup_paths, timeout_s, detail)  # type: ignore[arg-type]
+                      summary, inverse, backup_paths, timeout_s, detail, inverse_after)  # type: ignore[arg-type]
 
 
 def ReplaceDirectoryAtomic(ctx: Any, path: str | Path, staged_dir: str | Path | None,
                            allow_existing: bool = False, summary: str = "Replace directory",
                            inverse: Operation | None = (), *, backup_paths: tuple[str, ...] = (),
-                           timeout_s: float = 30.0, detail: dict | None = None) -> Operation:
+                           timeout_s: float = 30.0, detail: dict | None = None,
+                           inverse_after: tuple[str, ...] = ()) -> Operation:
     return _operation(ctx, "ReplaceDirectoryAtomic", {
         "path": str(Path(path).absolute()),
         "staged_dir": str(Path(staged_dir).absolute()) if staged_dir is not None else None,
         "allow_existing": bool(allow_existing),
-    }, summary, inverse, backup_paths, timeout_s, detail)  # type: ignore[arg-type]
+    }, summary, inverse, backup_paths, timeout_s, detail, inverse_after)  # type: ignore[arg-type]
 
 
 def RunCommand(ctx: Any, argv: Sequence[str], timeout_s: float = 30.0, summary: str = "Run command",
                inverse: Sequence[str] | Operation | None = None, expect_exit: int = 0,
                capture_limit: int = 65536, env_extra: Mapping[str, str | None] | None = None,
                stdin: str | None = None, wait_policy: str = "exit", *, backup_paths: tuple[str, ...] = (),
-               detail: dict | None = None) -> Operation:
+               detail: dict | None = None, inverse_after: tuple[str, ...] = ()) -> Operation:
     operation_id = _next_id(ctx)
     inv: Operation | None
     if isinstance(inverse, Operation) or inverse is None:
@@ -117,57 +121,61 @@ def RunCommand(ctx: Any, argv: Sequence[str], timeout_s: float = 30.0, summary: 
                      {"argv": list(argv), "timeout_s": float(timeout_s), "expect_exit": int(expect_exit),
                       "capture_limit": int(capture_limit), "env_extra": dict(env_extra or {}),
                       "stdin": stdin, "wait_policy": wait_policy}, summary, inv, backup_paths,
-                     float(timeout_s), detail)
+                     float(timeout_s), detail, tuple(inverse_after))
 
 
 def RestoreBackup(ctx: Any, path: str | Path, summary: str = "Restore backup", *,
                   backup_paths: tuple[str, ...] = (), timeout_s: float = 30.0,
-                  detail: dict | None = None) -> Operation:
+                  detail: dict | None = None, inverse_after: tuple[str, ...] = ()) -> Operation:
     return _operation(ctx, "RestoreBackup", {"path": str(Path(path).absolute())}, summary, (),
-                      backup_paths, timeout_s, detail)
+                      backup_paths, timeout_s, detail, inverse_after)
 
 
 def RemoveFile(ctx: Any, path: str | Path, summary: str = "Remove file",
                inverse: Operation | None = None, *, backup_paths: tuple[str, ...] = (),
-               timeout_s: float = 30.0, detail: dict | None = None) -> Operation:
+               timeout_s: float = 30.0, detail: dict | None = None,
+               inverse_after: tuple[str, ...] = ()) -> Operation:
     target = str(Path(path).absolute())
     operation_id = _next_id(ctx)
     inv = inverse or RestoreBackup(ctx, target)
     return Operation(operation_id, ctx.module_id, "RemoveFile", {"path": target}, summary, inv,
-                     backup_paths, float(timeout_s), detail)
+                     backup_paths, float(timeout_s), detail, tuple(inverse_after))
 
 
 def ShellIpc(ctx: Any, method: str, args: Sequence[Any] = (), expect: Sequence[str] = ("ok",),
              expect_json: bool = False, backup_paths: tuple[str, ...] = (),
              inverse: Operation | None = None, summary: str = "Call shell IPC", *,
-             timeout_s: float = 5.0, detail: dict | None = None) -> Operation:
+             timeout_s: float = 5.0, detail: dict | None = None,
+             inverse_after: tuple[str, ...] = ()) -> Operation:
     return _operation(ctx, "ShellIpc", {"method": method, "args": list(args), "expect": list(expect),
-                      "expect_json": bool(expect_json)}, summary, inverse, backup_paths, timeout_s, detail)
+                      "expect_json": bool(expect_json)}, summary, inverse, backup_paths, timeout_s, detail,
+                      inverse_after)
 
 
 def HyprctlReload(ctx: Any, config_only: bool = False, summary: str = "Reload Hyprland", *,
                   backup_paths: tuple[str, ...] = (), timeout_s: float = 30.0,
-                  detail: dict | None = None) -> Operation:
+                  detail: dict | None = None, inverse_after: tuple[str, ...] = ()) -> Operation:
     operation_id = _next_id(ctx)
     inverse = _operation(ctx, "HyprctlReload", {"config_only": bool(config_only)}, "Reload after rollback", ())
     return Operation(operation_id, ctx.module_id, "HyprctlReload", {"config_only": bool(config_only)},
-                     summary, inverse, backup_paths, float(timeout_s), detail)
+                     summary, inverse, backup_paths, float(timeout_s), detail, tuple(inverse_after))
 
 
 def TimedConfirmation(ctx: Any, seconds: int, summary: str = "Confirm the change", *,
                       backup_paths: tuple[str, ...] = (), timeout_s: float = 30.0,
-                      detail: dict | None = None) -> Operation:
+                      detail: dict | None = None, inverse_after: tuple[str, ...] = ()) -> Operation:
     operation_id = _next_id(ctx)
     inverse = _operation(ctx, "TimedConfirmation", {"seconds": int(seconds)}, "Confirm rollback", ())
     return Operation(operation_id, ctx.module_id, "TimedConfirmation", {"seconds": int(seconds)},
-                     summary, inverse, backup_paths, float(timeout_s), detail)
+                     summary, inverse, backup_paths, float(timeout_s), detail, tuple(inverse_after))
 
 
 def TerminalHandoff(ctx: Any, argv: Sequence[str], title: str, wrapped: bool = True,
                     summary: str = "Continue in terminal", *, backup_paths: tuple[str, ...] = (),
-                    timeout_s: float = 5.0, detail: dict | None = None) -> Operation:
+                    timeout_s: float = 5.0, detail: dict | None = None,
+                    inverse_after: tuple[str, ...] = ()) -> Operation:
     return _operation(ctx, "TerminalHandoff", {"argv": list(argv), "title": title, "wrapped": bool(wrapped)},
-                      summary, None, backup_paths, timeout_s, detail)
+                      summary, None, backup_paths, timeout_s, detail, inverse_after)
 
 
 def _required(params: dict[str, Any], *names: str) -> None:
@@ -181,6 +189,8 @@ def validate_operation(op: Operation, paths: Any, module_extra_paths: Iterable[s
         raise CcError("unsupported_config", f"Unknown operation kind: {op.kind}", operation_id=op.id)
     if not re.fullmatch(rf"{re.escape(op.module_id)}\.\d{{4}}", op.id):
         raise CcError("unsupported_config", f"Invalid operation id: {op.id}")
+    if not isinstance(op.inverse_after, tuple) or any(not isinstance(item, str) or not item for item in op.inverse_after):
+        raise CcError("unsupported_config", f"Invalid inverseAfter list for operation {op.id}")
     p = op.params
     if op.kind in _PATH_KINDS:
         _required(p, "path")

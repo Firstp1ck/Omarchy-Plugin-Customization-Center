@@ -69,24 +69,37 @@ def test_every_builder_produces_frozen_operations(isolated_home):
     paths = Paths.from_env(); ctx = _ctx(paths); target = paths.module_config("sample") / "x"
     staged = paths.staging_dir("sample", "plan")
     backup_paths = (str(target),); detail = {"preview": "value"}; timeout_s = 12.0
+    inverse_after = ("sample.0000",)
     operations = [
-        ops.WriteFileAtomic(ctx, target, "x", "0600", backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
-        ops.ReplaceManagedBlock(ctx, target.with_suffix(".lua"), "TEST", 1, "x", backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
-        ops.EnsureDirectory(ctx, target.parent, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
-        ops.ReplaceDirectoryAtomic(ctx, target, staged, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
-        ops.RunCommand(ctx, ["true"], timeout_s, "run", inverse=["true"], backup_paths=backup_paths, detail=detail),
-        ops.RestoreBackup(ctx, target, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
-        ops.RemoveFile(ctx, target, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
-        ops.ShellIpc(ctx, "ping", backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
-        ops.HyprctlReload(ctx, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
-        ops.TimedConfirmation(ctx, 1, backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
-        ops.TerminalHandoff(ctx, ["true"], "title", backup_paths=backup_paths, timeout_s=timeout_s, detail=detail),
+        ops.WriteFileAtomic(ctx, target, "x", "0600", backup_paths=backup_paths, timeout_s=timeout_s,
+                            detail=detail, inverse_after=inverse_after),
+        ops.ReplaceManagedBlock(ctx, target.with_suffix(".lua"), "TEST", 1, "x", backup_paths=backup_paths,
+                                timeout_s=timeout_s, detail=detail, inverse_after=inverse_after),
+        ops.EnsureDirectory(ctx, target.parent, backup_paths=backup_paths, timeout_s=timeout_s,
+                            detail=detail, inverse_after=inverse_after),
+        ops.ReplaceDirectoryAtomic(ctx, target, staged, backup_paths=backup_paths, timeout_s=timeout_s,
+                                   detail=detail, inverse_after=inverse_after),
+        ops.RunCommand(ctx, ["true"], timeout_s, "run", inverse=["true"], backup_paths=backup_paths,
+                       detail=detail, inverse_after=inverse_after),
+        ops.RestoreBackup(ctx, target, backup_paths=backup_paths, timeout_s=timeout_s,
+                          detail=detail, inverse_after=inverse_after),
+        ops.RemoveFile(ctx, target, backup_paths=backup_paths, timeout_s=timeout_s,
+                       detail=detail, inverse_after=inverse_after),
+        ops.ShellIpc(ctx, "ping", backup_paths=backup_paths, timeout_s=timeout_s,
+                     detail=detail, inverse_after=inverse_after),
+        ops.HyprctlReload(ctx, backup_paths=backup_paths, timeout_s=timeout_s,
+                          detail=detail, inverse_after=inverse_after),
+        ops.TimedConfirmation(ctx, 1, backup_paths=backup_paths, timeout_s=timeout_s,
+                              detail=detail, inverse_after=inverse_after),
+        ops.TerminalHandoff(ctx, ["true"], "title", backup_paths=backup_paths, timeout_s=timeout_s,
+                            detail=detail, inverse_after=inverse_after),
     ]
     assert {item.kind for item in operations} == set(ops._KINDS)
     for operation in operations:
         assert operation.backup_paths == backup_paths
         assert operation.timeout_s == timeout_s
         assert operation.detail == detail
+        assert operation.inverse_after == inverse_after
         ops.validate_operation(operation, paths)
         with pytest.raises(Exception):
             operation.kind = "changed"
