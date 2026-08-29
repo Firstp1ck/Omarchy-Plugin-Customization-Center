@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any
 
 from customization_center.core import ValidationIssue, ValidationResult, settings_schema
@@ -13,6 +14,15 @@ def validate(draft: dict[str, Any], status: Any) -> ValidationResult:
         return ValidationResult(False, (ValidationIssue("validation_failed", "Expected a bar schemaVersion 1 draft", "", "error"),), None)
     if draft.get("baseRevision") != status.revision:
         issues.append(ValidationIssue("stale_revision", "The shell configuration or plugin catalog changed", "/baseRevision", "error"))
+    action = draft.get("action", "apply")
+    if action not in {"apply", "save-preset", "delete-preset"}:
+        issues.append(ValidationIssue("validation_failed", "Unknown bar draft action", "/action", "error"))
+    if action in {"save-preset", "delete-preset"}:
+        preset_id = draft.get("presetId")
+        if not isinstance(preset_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,31}", preset_id):
+            issues.append(ValidationIssue("bar_preset_id_invalid", "Preset id must use lowercase letters, digits, and hyphens", "/presetId", "error"))
+        if action == "save-preset" and (not isinstance(draft.get("presetName"), str) or not draft.get("presetName", "").strip() or len(draft.get("presetName", "")) > 60):
+            issues.append(ValidationIssue("bar_preset_name_invalid", "Preset name must be 1 to 60 characters", "/presetName", "error"))
     candidate = draft.get("bar")
     if not isinstance(candidate, dict):
         return ValidationResult(False, tuple(issues) + (ValidationIssue("validation_failed", "bar must be an object", "/bar", "error"),), None)

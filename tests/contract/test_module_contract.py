@@ -197,6 +197,8 @@ def test_registered_module_contract(module_id, isolated_home, request):
     sample = json.loads((directory / "tests/fixtures/sample-draft.json").read_text())
     before = {str(p): (p.stat().st_mode, p.read_bytes()) for p in isolated_home.rglob("*") if p.is_file()}
     status = module.status(build_context(module_id, "read", paths=paths, registry=registry.view, plugin_dir=ROOT))
+    if "baseRevision" in sample:
+        sample["baseRevision"] = status.revision
     capabilities = module.capabilities(build_context(module_id, "read", paths=paths, registry=registry.view, plugin_dir=ROOT))
     validation = module.validate(build_context(module_id, "validate", paths=paths, registry=registry.view, plugin_dir=ROOT), sample, status)
     assert validation.ok and validation.normalized_draft is not None and capabilities.module_id == module_id

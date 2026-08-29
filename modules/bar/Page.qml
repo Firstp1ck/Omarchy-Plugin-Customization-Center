@@ -15,6 +15,8 @@ FocusScope {
     property var backendClient: null
     property string selectedKey: ""
     property string toastText: ""
+    property string selectedPresetId: ""
+    property string presetName: ""
 
     signal requestPlan()
     signal requestApply()
@@ -41,9 +43,13 @@ FocusScope {
             var section = sections[s]; var values = next.layout[section] || []
             for (var i = 0; i < values.length; ++i) { serial++; values[i].key = "d:" + serial; values[i].origin = ({ section: section, index: i }) }
         }
-        return ({ schemaVersion: 1, module: "bar", baseRevision: status ? status.revision : statusData.revision || "", bar: next })
+        return ({ schemaVersion: 1, module: "bar", baseRevision: status ? status.revision : statusData.revision || "",
+            action: "apply", presetId: null, presetName: null, bar: next })
     }
-    function emitDraft(next) { requestDraftPatch(next) }
+    function emitDraft(next) {
+        next.action = "apply"; next.presetId = null; next.presetName = null
+        requestDraftPatch(next)
+    }
     function updateBar(key, value) { var next = copy(activeDraft); next.bar[key] = value; emitDraft(next) }
     function locate(key) {
         var sections = ["left", "center", "right"]
@@ -70,6 +76,23 @@ FocusScope {
         var item = catalogItem(location.entry.id); if (!item || !item.allowMultiple) return
         var next = copy(activeDraft); var duplicate = copy(location.entry); duplicate.key = "d:" + Date.now(); duplicate.origin = null
         next.bar.layout[location.section].splice(location.index + 1, 0, duplicate); selectedKey = duplicate.key; emitDraft(next)
+    }
+    function loadBar(value) { var next = copy(activeDraft); next.bar = copy(value); emitDraft(next) }
+    function selectedPreset() {
+        var presets = statusData.presets || []
+        for (var i = 0; i < presets.length; ++i) if (presets[i].id === selectedPresetId) return presets[i]
+        return null
+    }
+    function loadPreset() { var preset = selectedPreset(); if (preset) loadBar(preset.barModel || preset.bar) }
+    function savePreset() {
+        if (!selectedPresetId || !presetName.trim()) return
+        var next = copy(activeDraft); next.action = "save-preset"; next.presetId = selectedPresetId; next.presetName = presetName.trim()
+        requestDraftPatch(next); Qt.callLater(function() { root.requestPlan() })
+    }
+    function deletePreset() {
+        if (!selectedPreset()) return
+        var next = copy(activeDraft); next.action = "delete-preset"; next.presetId = selectedPresetId; next.presetName = null
+        requestDraftPatch(next); Qt.callLater(function() { root.requestPlan() })
     }
     function focusFirst() { options.focusFirst() }
     function handlePayload(payload) {
@@ -104,6 +127,15 @@ FocusScope {
         }
         Text { visible: ["shell-unavailable", "load-error", "scanning", "stale"].indexOf(pageState) >= 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; text: pageState === "shell-unavailable" ? "The Omarchy shell is unavailable. Editing and draft saving remain available; Apply is refused." : pageState === "load-error" ? "shell.json is malformed or not version 1. Repair the file before Apply." : pageState === "scanning" ? "Plugin scan in progress." : "The bar changed since this draft was created. Reload or compare before Apply."; color: Color.urgent; font.family: Style.font.family }
         Bar.BarOptions { id: options; Layout.fillWidth: true; bar: root.bar; barOptions: statusData.barOptions || []; centerIds: (root.bar.layout.center || []).map(function(item) { return item.id }); busy: root.busy; onOptionChanged: (key, value) => root.updateBar(key, value) }
+        RowLayout {
+            Layout.fillWidth: true; spacing: Style.spacing.sm
+            Ui.Button { text: "Load Omarchy defaults"; focusable: true; enabled: !root.busy && !!statusData.defaults; onClicked: root.loadBar(statusData.defaults) }
+            Ui.Dropdown { objectName: "presetSelector"; Layout.preferredWidth: 180; value: root.selectedPresetId; options: [""].concat((statusData.presets || []).map(function(item) { return item.id })); onChanged: value => root.selectedPresetId = value }
+            Ui.TextField { objectName: "presetName"; Layout.preferredWidth: 180; text: root.presetName; placeholderText: "Preset name"; onTextChanged: root.presetName = text }
+            Ui.Button { text: "Load preset"; focusable: true; enabled: !root.busy && !!root.selectedPreset(); onClicked: root.loadPreset() }
+            Ui.Button { text: "Save preset"; focusable: true; enabled: !root.busy && root.selectedPresetId.length > 0 && root.presetName.trim().length > 0; onClicked: root.savePreset() }
+            Ui.Button { text: "Delete preset"; focusable: true; enabled: !root.busy && !!root.selectedPreset(); onClicked: root.deletePreset() }
+        }
         Bar.BarPreview { id: preview; Layout.fillWidth: true; bar: root.bar; catalog: root.catalog; selectedKey: root.selectedKey; onSelected: key => root.selectedKey = key; onMoveRequested: (key, section, index) => reorder.move(key, section, index); onRemoveRequested: key => { root.selectedKey = key; root.removeSelected() } }
         RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; spacing: Style.spacing.panelGap
             Bar.WidgetCatalog { Layout.preferredWidth: 280; Layout.fillHeight: true; catalog: root.catalog; onAddRequested: item => root.addWidget(item) }

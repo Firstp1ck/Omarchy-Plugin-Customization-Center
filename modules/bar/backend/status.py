@@ -80,6 +80,28 @@ def size_class(widget_id: str) -> str:
     return "icon"
 
 
+def read_presets(ctx: Any) -> tuple[list[dict[str, Any]], list[Warning]]:
+    directory = ctx.paths.module_config("bar") / "presets"
+    presets: list[dict[str, Any]] = []
+    warnings: list[Warning] = []
+    try:
+        paths = sorted(directory.glob("*.json"))
+    except OSError:
+        paths = []
+    for path in paths:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            if (not isinstance(value, dict) or value.get("schemaVersion") != 1 or
+                    value.get("id") != path.stem or not isinstance(value.get("name"), str) or
+                    not isinstance(value.get("bar"), dict)):
+                raise ValueError("invalid preset shape")
+            presets.append({**value, "barModel": from_shell(value["bar"], draft_keys=True)})
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            warnings.append(Warning("bar_preset_invalid", f"Preset {path.name} was ignored: {error}",
+                                    str(path), "Repair or delete the preset file"))
+    return presets, warnings
+
+
 def defaults_bar(ctx: Any) -> dict[str, Any]:
     _, document, _ = read_file(ctx.paths.omarchy_path / "config/omarchy/shell.json")
     result = from_shell((document or {}).get("bar", {}))
@@ -145,6 +167,8 @@ def build(ctx: Any):
     apply_file = shell_available and not scanning and (raw is None or version1) and not parse_error and ctx.paths.symlink_safe(file_path)
     if shell_available and raw is not None and (parse_error or not version1):
         warnings.append(Warning("bar_file_desync", "shell.json is malformed or does not have version 1", str(file_path), "Repair the file before applying"))
+    presets, preset_warnings = read_presets(ctx)
+    warnings.extend(preset_warnings)
     data = {"schemaVersion": 1, "module": "bar", "revision": revision,
             "shell": {"available": shell_available, "reason": reason, "configuredBarId": configured,
                       "configuredBarExplicit": bar.get("id") is not None, "activeBarId": active,
@@ -152,7 +176,8 @@ def build(ctx: Any):
             "source": {"kind": source_kind, "path": str(file_path if source_kind == "user" else ctx.paths.omarchy_path / "config/omarchy/shell.json")},
             "file": {"exists": raw is not None, "parses": file_document is not None and not parse_error,
                      "version1": version1, "matchesShell": matches, "sha256": file_hash, "error": parse_error},
-            "bar": bar, "defaults": defaults_bar(ctx), "catalog": widget_catalog, "barOptions": bar_options,
+            "bar": bar, "defaults": defaults_bar(ctx), "presets": presets,
+            "catalog": widget_catalog, "barOptions": bar_options,
             "capabilities": {"applyIpc": {"available": shell_available and not scanning, "reason": reason or ("Plugin scan in progress" if scanning else "")},
                              "applyFile": {"available": apply_file, "reason": "" if apply_file else reason or parse_error or "shell.json must be version 1"},
                              "selectBar": {"available": len(bar_options) > 1, "reason": "" if len(bar_options) > 1 else "Only the built-in bar is installed"},

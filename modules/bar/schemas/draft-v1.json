@@ -4,6 +4,9 @@
   "required": ["schemaVersion", "module", "baseRevision", "bar"],
   "properties": {
     "schemaVersion": {"const": 1}, "module": {"const": "bar"}, "baseRevision": {"type": "string"},
+    "action": {"enum": ["apply", "save-preset", "delete-preset"]},
+    "presetId": {"type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"},
+    "presetName": {"type": ["string", "null"], "minLength": 1, "maxLength": 60},
     "bar": {"$ref": "#/$defs/bar"}
   },
   "$defs": {

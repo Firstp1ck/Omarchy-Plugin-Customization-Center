@@ -32,6 +32,7 @@ def draft_from(status):
 
 class Paths:
     home = Path("/tmp/bar-test-home")
+    def module_config(self, module_id): return self.home / ".config/omarchy/customization-center" / module_id
 
 
 class Ctx:
@@ -83,3 +84,21 @@ def test_remove_second_repeated_instance_is_addressed_exactly(bar_backend):
     plan = bar_backend.planner.build_plan(Ctx(), draft, status)
     assert [operation.params["method"] for operation in plan.operations] == ["moveBarWidget", "setPluginEnabled"]
     assert plan.operations[0].params["args"][1]["fromIndex"] == 1
+
+
+def test_preset_save_and_delete_plans_use_executor(bar_backend):
+    status = status_value(bar_backend); status.data["presets"] = []
+    draft = draft_from(status) | {"action": "save-preset", "presetId": "presentation", "presetName": "Presentation"}
+    validation = bar_backend.validate.validate(draft, status)
+    assert validation.ok
+    plan = bar_backend.planner.build_plan(Ctx(), validation.normalized_draft, status)
+    assert [item.kind for item in plan.operations] == ["EnsureDirectory", "WriteFileAtomic"]
+    document = json.loads(plan.operations[-1].params["content"])
+    assert document["id"] == "presentation" and document["name"] == "Presentation"
+    assert all("key" not in item and "origin" not in item for values in document["bar"]["layout"].values() for item in values)
+
+    status.data["presets"] = [document]
+    deletion = draft_from(status) | {"action": "delete-preset", "presetId": "presentation", "presetName": None}
+    plan = bar_backend.planner.build_plan(Ctx(), deletion, status)
+    assert [item.kind for item in plan.operations] == ["RemoveFile"]
+    assert plan.requires_confirmation == ("bar_preset_delete:presentation",)

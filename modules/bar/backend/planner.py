@@ -134,11 +134,39 @@ def ipc_operations(ctx: Any, base: dict[str, Any], draft: dict[str, Any], status
 def build_plan(ctx: Any, draft: dict[str, Any], status: Any) -> Plan:
     if draft.get("baseRevision") != status.revision:
         raise CcError("stale_revision", "The bar changed since this draft was created")
+    base, target = status.data["bar"], draft["bar"]
+    action = draft.get("action", "apply")
+    if action in {"save-preset", "delete-preset"}:
+        preset_id = draft["presetId"]
+        preset_path = ctx.paths.module_config("bar") / "presets" / f"{preset_id}.json"
+        existing = next((item for item in status.data.get("presets", []) if item.get("id") == preset_id), None)
+        warning: Warning | None = None
+        if action == "save-preset":
+            document = {"schemaVersion": 1, "id": preset_id, "name": draft["presetName"].strip(),
+                        "bar": to_shell(target)}
+            operations = (ops.EnsureDirectory(ctx, preset_path.parent, "0700", "Ensure bar preset directory"),
+                          ops.WriteFileAtomic(ctx, preset_path,
+                              json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n",
+                              "0600", "Save bar preset", detail={"presetAction": "save", "preset": document}))
+            if existing is not None:
+                warning = Warning(f"bar_preset_replace:{preset_id}", f"Replace bar preset {preset_id}",
+                                  str(preset_path), "Confirm the named preset replacement", True)
+        else:
+            if existing is None:
+                raise CcError("bar_preset_missing", f"Bar preset does not exist: {preset_id}")
+            operations = (ops.RemoveFile(ctx, preset_path, f"Delete bar preset {preset_id}",
+                                         detail={"presetAction": "delete", "presetId": preset_id}),)
+            warning = Warning(f"bar_preset_delete:{preset_id}", f"Delete bar preset {preset_id}",
+                              str(preset_path), "Confirm the named preset deletion", True)
+        warnings = (warning,) if warning else ()
+        confirmations = (warning.code,) if warning else ()
+        return Plan("bar", status.revision, operations,
+                    (ResourceClaim(f"file:{preset_path}", "exclusive"),),
+                    f"{action.replace('-', ' ').title()} {preset_id}", warnings, confirmations)
     if not status.data.get("shell", {}).get("available"):
         raise CcError("capability_missing", "The Omarchy shell must be running before applying", {"capability": "applyFile"})
     if status.data.get("shell", {}).get("scanning"):
         raise CcError("bar_scan_in_progress", "The shell plugin scan is still in progress")
-    base, target = status.data["bar"], draft["bar"]
     reasons = route_reasons(base, target, status)
     shell_path = str(ctx.paths.home / ".config/omarchy/shell.json")
     warnings: list[Warning] = []

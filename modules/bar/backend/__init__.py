@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from customization_center.core import Capabilities, Capability, CcError, Status, VerifyResult
-from . import planner, status as status_reader, validate as validator
+from . import model, planner, status as status_reader, validate
 from .model import to_shell
 
 
@@ -26,12 +26,28 @@ class BarModule:
         return Status(self.id, revision, data, warnings, 1)
 
     def validate(self, ctx: Any, draft: dict[str, Any], status: Status):
-        return validator.validate(draft, status)
+        return validate.validate(draft, status)
 
     def plan(self, ctx: Any, draft: dict[str, Any], status: Status):
         return planner.build_plan(ctx, draft, status)
 
     def verify(self, ctx: Any, plan: Any, status_after: Status, results: dict[str, Any]) -> VerifyResult:
+        preset_detail = next((operation.detail for operation in plan.operations
+                              if operation.detail and operation.detail.get("presetAction")), None)
+        if preset_detail:
+            presets = {item.get("id"): item for item in status_after.data.get("presets", [])}
+            if preset_detail["presetAction"] == "save":
+                expected = preset_detail["preset"]
+                actual = presets.get(expected["id"])
+                comparable = ({key: actual.get(key) for key in ("schemaVersion", "id", "name", "bar")}
+                              if isinstance(actual, dict) else actual)
+                if comparable != expected:
+                    return VerifyResult("fail", "full", "Saved bar preset does not match the reviewed document",
+                                        "bar_preset_verify_failed", {"expected": expected, "actual": comparable})
+            elif preset_detail["presetId"] in presets:
+                return VerifyResult("fail", "full", "Deleted bar preset is still present",
+                                    "bar_preset_verify_failed", {"presetId": preset_detail["presetId"]})
+            return VerifyResult("pass", "full", "", evidence={"presetAction": preset_detail["presetAction"]})
         detail = next((operation.detail for operation in plan.operations if operation.detail and operation.detail.get("expected")), {})
         expected = detail.get("expected", {}).get("bar")
         if not status_after.data.get("shell", {}).get("available"):

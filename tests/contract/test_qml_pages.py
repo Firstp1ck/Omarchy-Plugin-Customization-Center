@@ -8,7 +8,7 @@ import pytest
 
 from customization_center.core.paths import Paths
 from customization_center.core.registry import load_registry
-from tests.qml.test_qml import QT_QML_PATH, _require_omarchy_shell, _require_tool
+from tests.qml.test_qml import QT_QML_PATH, TEST_IMPORTS, _require_omarchy_shell, _require_tool
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -36,7 +36,8 @@ def test_module_page_contract_with_qmltestrunner(module_id: str, page: Path, tmp
  }}
 }}\n''')
     env = dict(os.environ)
-    env["QML2_IMPORT_PATH"] = os.pathsep.join([str(shell), str(QT_QML_PATH)])
-    completed = subprocess.run([runner, "-input", str(test)], env=env, text=True,
+    env["QML2_IMPORT_PATH"] = os.pathsep.join([str(TEST_IMPORTS), str(shell), str(QT_QML_PATH)])
+    env["QML_IMPORT_PATH"] = env["QML2_IMPORT_PATH"]
+    completed = subprocess.run([runner, "-input", str(test), "-import", str(TEST_IMPORTS), "-import", str(shell)], env=env, text=True,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=20)
     assert completed.returncode == 0, completed.stdout

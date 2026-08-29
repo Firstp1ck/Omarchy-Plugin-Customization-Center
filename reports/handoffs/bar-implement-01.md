@@ -59,3 +59,18 @@ Commands were run from the isolated worktree with `PYTHONDONTWRITEBYTECODE=1` an
 2. Add `bar` to the canonical module registry in the integration-owner change.
 3. Run targeted and full contract suites, executor fault tests, shared QML, and full pytest.
 4. Exercise file creation/removal rollback, malformed/down-shell refusal, repeated instances, catalog drift, and third-party fallback in the disposable Omarchy VM.
+
+## Integration-owner completion
+
+The parent integrated `bar`, added deterministic contract stubs, and fixed the shared QML contract import path so the registered page runs against the test `qs` modules. Contract samples with a `baseRevision` now bind it to the status revision before validation.
+
+Preset persistence is no longer omitted. Save and delete are executor-backed draft actions, status inventories stored presets, loading rebases the stored shell-form bar model, replacement and deletion use named confirmations, and verification checks the stored result. The page exposes Load Omarchy defaults, Load preset, Save preset, and Delete preset controls.
+
+Final integrated validation:
+
+- `modules/bar/tests` plus targeted registered-module contract checks passed.
+- The complete `tests/contract` suite passed.
+- The full repository pytest suite passed with one expected skip.
+- `qmllint`, CLI/module smoke, JSON parsing, `git diff --check`, and cache scan passed.
+
+Live disposable-VM checks and the final independent review quorum remain open.

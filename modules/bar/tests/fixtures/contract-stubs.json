@@ -1,0 +1,12 @@
+{
+  "omarchy-shell": {
+    "exit_code": 0,
+    "stdout": "ok\n",
+    "byArgs": [
+      {"args": ["shell", "ping"], "stdout": "ok\n"},
+      {"args": ["shell", "listPlugins"], "stdout": "[{\"id\":\"omarchy.bar\",\"name\":\"Built-in bar\",\"kinds\":[\"bar\"],\"enabled\":true,\"active\":true,\"canDisable\":false,\"firstParty\":true,\"clonedFrom\":\"\"}]\n"},
+      {"args": ["shell", "listShellConfig"], "stdout": "{\"version\":1,\"bar\":{\"position\":\"top\",\"transparent\":false,\"layout\":{\"left\":[],\"center\":[],\"right\":[]}}}\n"}
+    ]
+  },
+  "omarchy-plugin-catalog": {"exit_code": 0, "stdout": "[]\n"}
+}

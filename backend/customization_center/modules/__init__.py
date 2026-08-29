@@ -1,1 +1,1 @@
-MODULES: list[str] = ["menu", "defaults", "monitors", "themes", "keybindings"]
+MODULES: list[str] = ["bar", "menu", "defaults", "monitors", "themes", "keybindings"]
