@@ -1,6 +1,30 @@
 # Omarchy Customization Center master plan
 
-Status: planned. Verified against `omarchy-fork` at commit `71b0887c` (`created CODE_OF_CONDUCT.md`), Hyprland 0.56.2, Python 3.14.7 on the development host.
+Status: in progress. Verified against `omarchy-fork` at commit `71b0887c` (`created CODE_OF_CONDUCT.md`), Hyprland 0.56.2, Python 3.14.7 on the development host.
+
+## Execution record
+
+Classification: complex. The feature crosses the QML shell, Python transaction core, eight module contracts, external command adapters, persistent schemas, and rollback behavior.
+
+Integration owner: the active parent Pi session. Workers may edit only their assigned paths. The integration owner alone updates this plan, the module registry, shared documentation, the final report, and plan status.
+
+Continuation base: repository commit `71315e4`. Core, menu, defaults, monitors, themes, and keybindings have implementation commits. Defaults and themes remain blocked by independent review findings. Bar, plugins, and modes are not implemented. The feature is incomplete.
+
+Approved contract corrections:
+
+- Add optional operation inverse dependencies as `inverseAfter` on the wire and `inverse_after` in Python. The generic executor validates and applies them in automatic rollback and committed user undo. Reverse completion order remains the stable default when no dependency changes it.
+- A failed handoff reconciliation stores the module's `VerifyResult`, including code, reason, and evidence, then rolls back with reason `verification`. `handoff_failed` is reserved for launcher or sentinel failure.
+- Abandoning a pending handoff rolls back every completed reversible operation. The handoff itself remains non-reversible and may continue outside the plugin.
+- The monitor mode cache and `monitors_stale_modes` warning remain required. Removing them would be a product change and is not approved.
+
+Execution waves:
+
+1. `CORE-ROLLBACK-01`: generic verification persistence, safe abandon, inverse dependency ordering, schemas, and core tests. Handoff: `reports/handoffs/core-rollback-01.md`.
+2. `DEFAULTS-HARDEN-01` and `THEMES-HARDEN-01`: module-only corrections after the core wave. Handoffs: `reports/handoffs/defaults-harden-01.md` and `reports/handoffs/themes-harden-01.md`.
+3. `BAR-IMPLEMENT-01`, then `PLUGINS-IMPLEMENT-01`, then `MODES-IMPLEMENT-01`, preserving the dependency order in the roadmap. Each gets a unique handoff under `reports/handoffs/`.
+4. Integration, monitor cache completion, cross-workstream validation, two fresh provider-distinct reviews, finding disposition, VM checks, and `reports/customization-center-implementation.html`.
+
+The unresolved release choices near the end of this plan are deferred to hardening. They block release claims, not the core and module corrections above.
 
 ## Goal
 
@@ -328,6 +352,7 @@ class Operation:
     backup_paths: tuple[str, ...]       # files the executor backs up before running this op
     timeout_s: float = 30.0
     detail: dict | None = None   # optional diff or before/after for DiffView
+    inverse_after: tuple[str, ...] = ()  # forward operation ids whose inverses must finish before this inverse
 
 @dataclass(frozen=True)
 class ResourceClaim:
@@ -419,14 +444,14 @@ Rules the executor enforces on every plan:
 4. Load, validate, and normalize the draft (`migrate` if its `schemaVersion` is older, `schema_version_unsupported` if newer). Return `validation_failed` on errors.
 5. Call `status()`. If `status.revision != expected_revision`, return `stale_revision` with both revisions. Never retry silently; the UI offers Reload and Compare.
 6. Call `plan(draft, status)`. Compute `plan_digest`. If the caller passed `--plan-digest`, require equality; otherwise the reviewed plan is the one the UI already displayed and the digests will match unless state moved, which step 5 caught.
-7. Validate the plan: operation kinds and params, path allowlist, claim conflicts (`resource_conflict` when two exclusive claims share a key, which matters for composed plans), confirmation requirements.
+7. Validate the plan: operation kinds and params, path allowlist, claim conflicts (`resource_conflict` when two exclusive claims share a key, which matters for composed plans), confirmation requirements, and `inverseAfter` references. Every inverse dependency names an earlier operation in the same plan, and the dependency graph must be acyclic.
 8. Create the transaction file in state `applying` with `before_revision`, the plan, and empty progress, and write its id to `$XDG_RUNTIME_DIR/omarchy-customization-center/current-transaction` (removed at exit). If the plan contains a `TimedConfirmation`, arm the backstop now, before any backup: `systemd-run --user --unit omarchy-cc-confirm-<txid> --on-active=<B>s --timer-property=AccuracySec=1s -- /usr/bin/python3 <absolute ccctl path> rollback <txid> --reason timeout`, where `B` is the sum of `timeout_s` of every operation before the gate plus `seconds` plus 5. Record `confirmation: {unit, armedAt, status: "armed"}`. The absolute `ccctl` path is the one `ccctl` recorded for itself at startup, because the overlay that spawned this apply may be gone when the timer fires.
 9. Back up every path in every operation's `backup_paths` plus every file a `WriteFileAtomic` or `ReplaceManagedBlock` targets. Record mode, sha256, and absence. A backup failure aborts before any write.
 10. Run operations in order. After each, append its id to `completed_operation_ids` and fsync. A failure records `{code, message, operation_id}` and jumps to step 14. At a `TimedConfirmation`: run the pre-confirmation check, which is `verify` for every segment whose operations have all completed (for a single-module plan, the module's own `verify` with the partial `results` dict; operations not yet run are absent from it); `fail` jumps to step 14 without waiting. Then set `awaiting_confirmation` with `confirmation.deadline = now + seconds` and the sha256 of a random token, fsync, keep the lock, and poll every 200 ms for the token file `$XDG_RUNTIME_DIR/omarchy-customization-center/confirm/<txid>`. Token present before the deadline with a matching digest: `systemctl --user stop omarchy-cc-confirm-<txid>.timer`, delete the token file, state back to `applying`, continue with the operations after the gate. Deadline passes: state `rolling_back`, reason `timeout`, step 14; the backstop finds the record terminal when it fires and exits 0.
 11. If the plan contains a `TerminalHandoff`, the transaction moves to `pending_handoff` after it launches, the lock is released, and the command returns `ok: true` with `data.pending: true`. The handoff finishes later through `ccctl reconcile`, which takes the lock and reads the sentinel `cc-handoff` wrote: exit 0 (or no sentinel for an unwrapped handoff) means run `status()` and `verify()` and move to `committed` on pass, `rolling_back` on fail, or stay pending; a non-zero exit means `rolling_back` with reason `handoff_failed` and nothing to invert; a missing sentinel for a wrapped handoff means still pending. `ccctl status <module>` lists the module's pending handoff transactions so a page can resume them on focus.
 12. Call `status()` again and `verify(plan, status_after, results)` for every segment. `fail` jumps to step 14. `pending` outside a handoff is treated as `fail`. `level: "limited"` is recorded and returned as a warning, not a failure.
 13. Mark `committed`, record `after_revision`, stop the backstop unit if it is still armed, remove `current-transaction`, release the lock, return. The token for a gate is returned to the caller once in `data.confirmation` together with the deadline and unit name, and is never stored in clear; `ccctl apply` itself stays blocked through the gate, so the UI reads `ccctl transaction current` to drive the countdown.
-14. Rollback. State becomes `rolling_back`. Walk `completed_operation_ids` in reverse and run each inverse; a tuple inverse runs in its listed order. An operation with `inverse: None` is skipped and recorded as `skipped_nonreversible`. A `WriteFileAtomic` whose file sha256 differs from `written_sha256` is skipped as `rollback_conflict`. `HyprctlReload` inverses are skipped in place and one reload runs after the last file-restoring inverse, `config-only` only if every deferred reload was `config_only`; if any inverse restored a file under `~/.config/hypr/` and no reload inverse was in the walk, one reload runs anyway. Each inverse failure is recorded in `rollback_errors` and the walk continues; stopping at the first failure would leave more damage, not less.
+14. Rollback. State becomes `rolling_back`. Order completed operations by their validated inverse dependencies, using reverse completion order as the stable tie-breaker, then run each inverse; a tuple inverse runs in its listed order. Dependencies that name operations which did not complete are ignored for that rollback. An operation with `inverse: None` is skipped and recorded as `skipped_nonreversible`. A `WriteFileAtomic` whose file sha256 differs from `written_sha256` is skipped as `rollback_conflict`. `HyprctlReload` inverses are skipped in place and one reload runs after the last file-restoring inverse, `config-only` only if every deferred reload was `config_only`; if any inverse restored a file under `~/.config/hypr/` and no reload inverse was in the walk, one reload runs anyway. Each inverse failure is recorded in `rollback_errors` and the walk continues; stopping at the first failure would leave more damage, not less. Committed user undo uses the same ordering helper.
 15. If `rollback_errors` is empty, run `status()` and compare against `before_revision`. Equal means state `rolled_back`; the result carries the original error. Not equal means the inverses ran but something outside the plan also changed; state `rolled_back` with a warning `revision_drift_after_rollback`.
 16. If `rollback_errors` is not empty, state `rollback_failed`. The result is `ok: false`, code `rollback_failed`, and `data` lists every backup path, the operations that could not be reversed, and the terminal recovery command for each (`ccctl restore <txid> --path <p>` copies a backup back into place without any other side effect). The UI shows this as a pinned red panel that survives navigation and reopening until the user resolves it, and `ccctl apply` for any module returns `recovery_required` until then.
 
@@ -614,8 +639,8 @@ ccctl reconcile <transaction-id>
 ccctl recover
     Runs the startup recovery scan explicitly and reports what it finished or could not finish.
 ccctl abandon <transaction-id>
-    Marks a pending_handoff transaction rolled_back with reason user. Runs no inverses; a handoff
-    has none.
+    Rolls a pending_handoff transaction back with reason user. Completed reversible operations run
+    their inverses; the non-reversible handoff is skipped and may continue outside the plugin.
 ccctl restore <transaction-id> --path <path>
     Copies one backup back into place. Only for rollback_failed recovery. No other side effects.
 ccctl history [--module <module>] [--limit N] [--state <state>]
@@ -779,7 +804,7 @@ Transaction journal (`schemas/transaction-v1.json`), abbreviated to the top leve
 }
 ```
 
-State machine: `applying` goes to `committed`, `awaiting_confirmation`, `pending_handoff`, or `rolling_back`. `awaiting_confirmation` goes back to `applying` (token accepted, operations after the gate continue) or to `rolling_back` (timeout, user revert, or recovery). `pending_handoff` goes to `committed` (`reconcile` passes), to `rolling_back` (`reconcile` fails, or the sentinel reports a non-zero exit, reason `handoff_failed`), or to `rolled_back` with reason `user` through `abandon`, which runs no inverses because a handoff has none. `rolling_back` goes to `rolled_back` or `rollback_failed`. A `committed` record never changes state; user undo through `ccctl rollback --reason user` creates a new transaction whose plan is the inverse list (with the gate rule above when the original had one), so the original record stays intact. `rollback_failed` is terminal for the record; a later successful `ccctl restore` appends to `rollbackErrors` with `resolved: true` and clears the global block once every entry is resolved.
+State machine: `applying` goes to `committed`, `awaiting_confirmation`, `pending_handoff`, or `rolling_back`. `awaiting_confirmation` goes back to `applying` (token accepted, operations after the gate continue) or to `rolling_back` (timeout, user revert, or recovery). `pending_handoff` goes to `committed` (`reconcile` passes) or to `rolling_back`. Verification failure uses reason `verification`; launcher or sentinel failure uses `handoff_failed`; `abandon` uses `user`. The rollback walk reverses completed reversible operations and skips the non-reversible handoff. `rolling_back` goes to `rolled_back` or `rollback_failed`. A `committed` record never changes state; user undo through `ccctl rollback --reason user` creates a new transaction whose plan is the inverse list (with the gate rule above when the original had one), so the original record stays intact. `rollback_failed` is terminal for the record; a later successful `ccctl restore` appends to `rollbackErrors` with `resolved: true` and clears the global block once every entry is resolved.
 
 The journal never records environment variables, full stdout, or draft contents. `commandLog` keeps the first 4 KiB of each stream after `commands.py` redaction (patterns for `token`, `password`, `secret`, `Bearer`, and URL userinfo).
 

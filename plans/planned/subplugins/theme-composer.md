@@ -755,7 +755,7 @@ Failure of any check returns `verification_failed` with the check number and the
 
 ### 11.5 Rollback semantics
 
-The executor restores the directory backup and runs the inverse `omarchy-theme-set <previous>` then the inverse `bg-set`. The order matters in the same-slug case (replacing the active theme with a new version of itself): the directory must be restored before `omarchy-theme-set` runs again, or the "rollback" reactivates the new bytes. The plan's operation order already puts the directory replacement first, so reverse order restores it first.
+The executor restores the directory backup, runs the inverse `omarchy-theme-set <previous>`, then runs the inverse `bg-set`. The order matters in the same-slug case: the directory must be restored before `omarchy-theme-set` runs again, or rollback reactivates the new bytes. Reverse operation order does not provide that sequence. The activation operation declares `inverseAfter` on the directory replacement, and the wallpaper operation declares `inverseAfter` on activation. Activation-only plans keep the latter dependency. The generic executor validates these references and uses the same dependency ordering for failure rollback and committed user undo.
 
 What rollback does not do, and the review says so: it does not undo `theme-set` hooks, and it does not restore application state that a retint changed in a way the second retint does not reverse (a browser policy file is rewritten, a VS Code extension is reinstalled with the old colors, but a hook that sent a notification has already sent it).
 
