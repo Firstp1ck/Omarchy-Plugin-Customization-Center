@@ -5,9 +5,9 @@ The Customization Center is an Omarchy shell overlay for reviewing and applying 
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/Firstpick/Omarchy-Plugin-Customization-Center.git
-omarchy plugin enable firstpick.customization-center
-omarchy-shell shell summon firstpick.customization-center '{}'
+omarchy plugin add https://github.com/Firstp1ck/Omarchy-Plugin-Customization-Center.git
+omarchy plugin enable firstp1ck.customization-center
+omarchy-shell shell summon firstp1ck.customization-center '{}'
 ```
 
 Enabling the plugin is mandatory. `omarchy plugin add` installs third-party plugins disabled, and the shell will not summon a disabled plugin.
@@ -17,7 +17,7 @@ The minimum supported Omarchy source revision is commit `71b0887c`. Monitor and 
 A module can be opened directly with a summon payload:
 
 ```bash
-omarchy-shell shell summon firstpick.customization-center '{"module":"bar"}'
+omarchy-shell shell summon firstp1ck.customization-center '{"module":"bar"}'
 ```
 
 ## Layout
